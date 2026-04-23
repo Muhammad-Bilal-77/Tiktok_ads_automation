@@ -1134,6 +1134,53 @@ def main():
         else:
             log_success("Campaign budget = 1000.")
 
+        # ── Click Continue button ────────────────────────────────────────────
+        log_info("[CONTINUE] Looking for Continue button...")
+        time.sleep(1.5)
+
+        continue_clicked = False
+        for _ct in range(5):
+            try:
+                # Try direct querySelector by data-testid (light DOM)
+                btn = driver.execute_script("""
+                    return document.querySelector('ks-button-91g[data-testid="common_next_button"]')
+                        || document.querySelector('[data-testid="common_next_button"]');
+                """)
+                if btn:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+                    time.sleep(0.4)
+                    driver.execute_script("arguments[0].click();", btn)
+                    log_success("[CONTINUE] Clicked Continue via JS!")
+                    continue_clicked = True
+                    break
+                else:
+                    # Fallback: scan all ks-button-91g elements for text "Continue"
+                    btn2 = driver.execute_script("""
+                        var btns = document.querySelectorAll('ks-button-91g');
+                        for (var i = 0; i < btns.length; i++) {
+                            if ((btns[i].innerText || '').trim() === 'Continue') return btns[i];
+                        }
+                        return null;
+                    """)
+                    if btn2:
+                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn2)
+                        time.sleep(0.4)
+                        driver.execute_script("arguments[0].click();", btn2)
+                        log_success("[CONTINUE] Clicked Continue via text-scan fallback!")
+                        continue_clicked = True
+                        break
+                    log_info(f"[CONTINUE] Button not found on attempt {_ct+1}, retrying...")
+                    time.sleep(1)
+            except Exception as ce:
+                log_error(f"[CONTINUE] Error on attempt {_ct+1}: {ce}")
+                time.sleep(1)
+
+        if not continue_clicked:
+            log_error("[CONTINUE] Could not find/click Continue button.")
+        else:
+            time.sleep(2)
+            log_success(f"[CONTINUE] URL after click: {driver.current_url}")
+
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
 
