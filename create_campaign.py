@@ -18,6 +18,7 @@ import json
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import (
     TimeoutException,
@@ -936,6 +937,202 @@ def main():
             log_error("Could not enable 'Set campaign budget' toggle — continuing.")
         else:
             log_success("'Set campaign budget' is ON!")
+
+        # ── STEP 11: Type 1000 in the campaign budget input ─────────────
+        # Exact DOM path from DevTools:
+        #   x-input-number-*[class*="budgetInput"]   ← light DOM, findable
+        #     └─ #shadow-root
+        #         └─ x-input-*                       ← inner host
+        #             └─ #shadow-root
+        #                 └─ input[type="text"]      ← REAL INPUT
+        log_step(11, "Setting campaign budget to 1000...")
+        set_label(driver, "STEP 11: Typing budget 1000...")
+
+        # Scroll to bottom first to ensure budget section is rendered
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1.5)
+
+        budget_input_done = False
+
+        for _bi in range(6):
+            # ── Find the custom element that HAS a shadowRoot + budget context ──
+            coords = driver.execute_script("""
+                // Scan ALL elements — find one with .shadowRoot whose class/tag/ancestor
+                // indicates it's the budget amount input host.
+                var outerHost = null;
+                var allEls = document.querySelectorAll('*');
+
+                // Pass 1: tag starts with x-input-number AND has shadowRoot
+                for (var i = 0; i < allEls.length; i++) {
+                    var el = allEls[i];
+                    if (!el.shadowRoot) continue;
+                    var tag = el.tagName.toLowerCase();
+                    if (tag.startsWith('x-input-number')) {
+                        // Confirm it's near the budget section
+                        var par = el.parentElement;
+                        var parText = par ? (par.textContent || '') : '';
+                        var cls = (el.className || '').toLowerCase();
+                        if (parText.includes('USD') || cls.includes('budget') ||
+                            parText.toLowerCase().includes('budget')) {
+                            outerHost = el; break;
+                        }
+                    }
+                }
+
+                // Pass 2: any element with shadowRoot and 'budget' in class
+                if (!outerHost) {
+                    for (var j = 0; j < allEls.length; j++) {
+                        if (!allEls[j].shadowRoot) continue;
+                        var cls2 = (allEls[j].className || '').toLowerCase();
+                        if (cls2.includes('budget')) { outerHost = allEls[j]; break; }
+                    }
+                }
+
+                // Pass 3: any x-input-number-* with shadowRoot (no text check)
+                if (!outerHost) {
+                    for (var k = 0; k < allEls.length; k++) {
+                        if (!allEls[k].shadowRoot) continue;
+                        if (allEls[k].tagName.toLowerCase().startsWith('x-input-number')) {
+                            outerHost = allEls[k]; break;
+                        }
+                    }
+                }
+
+                if (!outerHost) return {err: 'outer host with shadowRoot not found'};
+
+                // Pierce shadow root 1 — find inner x-input host
+                var sr1 = outerHost.shadowRoot;
+                var innerHost = null;
+                var sr1All = sr1.querySelectorAll('*');
+                for (var m = 0; m < sr1All.length; m++) {
+                    if (sr1All[m].shadowRoot) { innerHost = sr1All[m]; break; }
+                }
+                if (!innerHost) return {err: 'inner host not found in sr1'};
+
+                // Pierce shadow root 2 — find the actual <input>
+                var sr2 = innerHost.shadowRoot;
+                var inp = sr2.querySelector('input[type="text"]') ||
+                          sr2.querySelector('input[type="number"]') ||
+                          sr2.querySelector('input');
+                if (!inp) return {err: 'input not found in sr2'};
+
+                // Scroll the OUTER light-DOM element (not the shadow input)
+                outerHost.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                var r = inp.getBoundingClientRect();
+                if (r.width === 0) return {err: 'input has zero width (not rendered yet)'};
+
+                return {
+                    x:   Math.round(r.left + r.width  / 2),
+                    y:   Math.round(r.top  + r.height / 2),
+                    val: inp.value,
+                    ph:  inp.placeholder,
+                    w:   Math.round(r.width),
+                    h:   Math.round(r.height)
+                };
+            """)
+
+            if not coords or coords.get("err"):
+                err = coords.get("err", "null") if coords else "null"
+                log_info(f"[BUDGET-INPUT] Not ready (attempt {_bi+1}): {err} — retrying in 2s...")
+                time.sleep(2)
+                continue
+
+            cx, cy = coords["x"], coords["y"]
+            log_info(f"[BUDGET-INPUT] Input at ({cx},{cy}) {coords['w']}×{coords['h']} "
+                     f"ph='{coords.get('ph','')}' val='{coords.get('val','')}'")
+
+            # Safety: reject coordinates that are off-screen
+            if cy < 0 or cy > 900 or cx < 0:
+                log_info(f"[BUDGET-INPUT] Coords look off-screen, scrolling and retrying...")
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1.5)
+                continue
+
+            # ── Click the input and type ──────────────────────────────────
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+            time.sleep(0.3)
+            move_mouse_to(driver, cx, cy)
+            time.sleep(0.4)
+            ActionChains(driver).click().perform()
+            time.sleep(0.4)
+
+            # Clear + type
+            ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
+            time.sleep(0.2)
+            ActionChains(driver).send_keys(Keys.DELETE).perform()
+            time.sleep(0.2)
+            ActionChains(driver).send_keys("1000").perform()
+            time.sleep(0.5)
+
+            # ── Force value via native setter + fire composed events ───────
+            driver.execute_script("""
+                var outerHost = null;
+                var allE = document.querySelectorAll('*');
+                for (var i = 0; i < allE.length; i++) {
+                    if (!allE[i].shadowRoot) continue;
+                    var t = allE[i].tagName.toLowerCase();
+                    var c = (allE[i].className||'').toLowerCase();
+                    if (t.startsWith('x-input-number') || c.includes('budget')) {
+                        outerHost = allE[i]; break;
+                    }
+                }
+                if (!outerHost) return;
+
+                var innerHost = null;
+                var sr1A = outerHost.shadowRoot.querySelectorAll('*');
+                for (var j = 0; j < sr1A.length; j++) {
+                    if (sr1A[j].shadowRoot) { innerHost = sr1A[j]; break; }
+                }
+                if (!innerHost || !innerHost.shadowRoot) return;
+
+                var inp = innerHost.shadowRoot.querySelector('input[type="text"]') ||
+                          innerHost.shadowRoot.querySelector('input');
+                if (!inp) return;
+
+                var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+                setter.call(inp, '1000');
+                inp.dispatchEvent(new InputEvent('input',  {bubbles:true, composed:true, data:'1000'}));
+                inp.dispatchEvent(new Event('change', {bubbles:true, composed:true}));
+            """)
+            time.sleep(0.6)
+
+            # ── Verify ────────────────────────────────────────────────────
+            actual = driver.execute_script("""
+                var outerHost2 = null;
+                var allV = document.querySelectorAll('*');
+                for (var i = 0; i < allV.length; i++) {
+                    if (!allV[i].shadowRoot) continue;
+                    var t2 = allV[i].tagName.toLowerCase();
+                    var c2 = (allV[i].className||'').toLowerCase();
+                    if (t2.startsWith('x-input-number') || c2.includes('budget')) {
+                        outerHost2 = allV[i]; break;
+                    }
+                }
+                if (!outerHost2) return null;
+                var innerH = null;
+                var sr1V = outerHost2.shadowRoot.querySelectorAll('*');
+                for (var j = 0; j < sr1V.length; j++) {
+                    if (sr1V[j].shadowRoot) { innerH = sr1V[j]; break; }
+                }
+                if (!innerH || !innerH.shadowRoot) return null;
+                var inp2 = innerH.shadowRoot.querySelector('input');
+                return inp2 ? inp2.value : null;
+            """)
+            log_info(f"[BUDGET-INPUT] Value after typing: '{actual}'")
+
+            if actual and "1000" in str(actual).replace(",", ""):
+                log_success(f"[BUDGET-INPUT] Budget = '{actual}' ✓")
+                budget_input_done = True
+                break
+
+            log_info(f"[BUDGET-INPUT] Mismatch on attempt {_bi+1}, retrying...")
+            time.sleep(1)
+
+        if not budget_input_done:
+            log_error("Could not set budget to 1000 — continuing.")
+        else:
+            log_success("Campaign budget = 1000.")
 
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
