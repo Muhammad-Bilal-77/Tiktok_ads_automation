@@ -1205,7 +1205,89 @@ def main():
         driver.execute_script("window.scrollBy(0, 600);")
         time.sleep(1)
 
-        # Now locate and click the timezone dropdown
+        # ── Fill Ad Group Budget input with 100 ──────────────────────────────
+        log_info("[ADGROUP BUDGET] Looking for budget input above Time zone...")
+        budget_filled = False
+        for _ab in range(5):
+            try:
+                budget_inp = driver.execute_script("""
+                    // The budget input is inside a Web Component with shadow DOM
+                    // Wrapper: class contains 'input_wrapper'
+                    // Inner: <input part="input" class="input" type="text">
+                    // Strategy 1: find via shadow roots
+                    function findInShadow(root) {
+                        var inputs = root.querySelectorAll('input[part="input"][type="text"], input.input[type="text"]');
+                        for (var i = 0; i < inputs.length; i++) {
+                            var r = inputs[i].getBoundingClientRect();
+                            if (r.width > 50 && r.height > 0) return inputs[i];
+                        }
+                        var all = root.querySelectorAll('*');
+                        for (var j = 0; j < all.length; j++) {
+                            if (all[j].shadowRoot) {
+                                var found = findInShadow(all[j].shadowRoot);
+                                if (found) return found;
+                            }
+                        }
+                        return null;
+                    }
+
+                    // First try light DOM: Budget section has a label "Budget" nearby
+                    // find the .vi-form-item that contains "Budget" label text
+                    var formItems = document.querySelectorAll('.vi-form-item');
+                    for (var k = 0; k < formItems.length; k++) {
+                        var txt = (formItems[k].innerText || '').toLowerCase();
+                        if (txt.includes('budget') && !txt.includes('time zone') && !txt.includes('schedule')) {
+                            // Look inside for shadow root inputs
+                            var allInItem = formItems[k].querySelectorAll('*');
+                            for (var m = 0; m < allInItem.length; m++) {
+                                if (allInItem[m].shadowRoot) {
+                                    var f = findInShadow(allInItem[m].shadowRoot);
+                                    if (f) return f;
+                                }
+                            }
+                            // Also try regular input[type=number] or input[type=text]
+                            var directInp = formItems[k].querySelector('input[type="number"], input[type="text"]:not([readonly])');
+                            if (directInp) return directInp;
+                        }
+                    }
+
+                    // Strategy 2: find ANY shadow-root input visible in viewport
+                    return findInShadow(document);
+                """)
+
+                if budget_inp:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", budget_inp)
+                    time.sleep(0.4)
+                    # Click the input to focus it
+                    driver.execute_script("arguments[0].click();", budget_inp)
+                    time.sleep(0.3)
+                    ActionChains(driver).move_to_element(budget_inp).click().perform()
+                    time.sleep(0.3)
+                    # Select all and delete existing value
+                    ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
+                    time.sleep(0.2)
+                    ActionChains(driver).send_keys(Keys.DELETE).perform()
+                    time.sleep(0.2)
+                    # Type 100
+                    ActionChains(driver).send_keys("100").perform()
+                    time.sleep(0.3)
+                    log_success(f"[ADGROUP BUDGET] Typed '100' in budget input (attempt {_ab+1})!")
+                    budget_filled = True
+                    break
+                else:
+                    log_info(f"[ADGROUP BUDGET] Input not found on attempt {_ab+1}, scrolling up...")
+                    driver.execute_script("window.scrollBy(0, -200);")
+                    time.sleep(0.8)
+            except Exception as ab_err:
+                log_error(f"[ADGROUP BUDGET] Error on attempt {_ab+1}: {ab_err}")
+                time.sleep(0.8)
+
+        if not budget_filled:
+            log_error("[ADGROUP BUDGET] Could not fill budget input.")
+        else:
+            time.sleep(0.5)
+
+
         log_info("[TIMEZONE] Looking for timezone dropdown...")
         timezone_clicked = False
         for _tz in range(8):
