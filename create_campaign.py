@@ -1295,6 +1295,86 @@ def main():
             time.sleep(1.5)
             log_success("[TIMEZONE] Timezone dropdown opened.")
 
+            # ── Search for Pakistan in the timezone dropdown ──────────────
+            log_info("[TIMEZONE] Looking for Search input in dropdown...")
+            search_typed = False
+            for _s in range(5):
+                try:
+                    search_inp = driver.execute_script("""
+                        // Find the visible search input inside the dropdown popup
+                        // It has placeholder="Search" and class="vi-input__inner"
+                        var inputs = document.querySelectorAll('input[placeholder="Search"]');
+                        for (var i = 0; i < inputs.length; i++) {
+                            var r = inputs[i].getBoundingClientRect();
+                            if (r.width > 0 && r.height > 0) return inputs[i];
+                        }
+                        return null;
+                    """)
+                    if search_inp:
+                        # Click the search input
+                        driver.execute_script("arguments[0].click();", search_inp)
+                        time.sleep(0.3)
+                        ActionChains(driver).move_to_element(search_inp).click().perform()
+                        time.sleep(0.3)
+                        # Clear any existing text then type Pakistan
+                        search_inp.clear()
+                        time.sleep(0.2)
+                        ActionChains(driver).move_to_element(search_inp).click().send_keys("Pakistan").perform()
+                        log_success("[TIMEZONE] Typed 'Pakistan' in search box!")
+                        search_typed = True
+                        break
+                    else:
+                        log_info(f"[TIMEZONE] Search input not visible on attempt {_s+1}, waiting...")
+                        time.sleep(0.8)
+                except Exception as se:
+                    log_error(f"[TIMEZONE] Search input error on attempt {_s+1}: {se}")
+                    time.sleep(0.8)
+
+            if not search_typed:
+                log_error("[TIMEZONE] Could not find/type in timezone search input.")
+            else:
+                # Wait for results to filter
+                time.sleep(1.2)
+                # Click the first matching result in the dropdown list
+                log_info("[TIMEZONE] Clicking first Pakistan result...")
+                for _r in range(4):
+                    try:
+                        option_clicked = driver.execute_script("""
+                            // Find dropdown option items containing 'Pakistan'
+                            var opts = document.querySelectorAll(
+                                '.vi-select-dropdown__item, .vi-option, [class*="option"], [class*="dropdown-item"]'
+                            );
+                            for (var i = 0; i < opts.length; i++) {
+                                var txt = (opts[i].innerText || opts[i].textContent || '').toLowerCase();
+                                if (txt.includes('pakistan')) {
+                                    opts[i].scrollIntoView({block:'center'});
+                                    opts[i].click();
+                                    return true;
+                                }
+                            }
+                            // Fallback: any visible li/div whose text has 'pakistan'
+                            var all = document.querySelectorAll('li, [role="option"]');
+                            for (var j = 0; j < all.length; j++) {
+                                var t = (all[j].innerText || '').toLowerCase();
+                                if (t.includes('pakistan')) {
+                                    all[j].scrollIntoView({block:'center'});
+                                    all[j].click();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        """)
+                        if option_clicked:
+                            log_success("[TIMEZONE] Selected Pakistan timezone!")
+                            break
+                        else:
+                            log_info(f"[TIMEZONE] Pakistan option not found on attempt {_r+1}, waiting...")
+                            time.sleep(0.8)
+                    except Exception as re_err:
+                        log_error(f"[TIMEZONE] Option click error on attempt {_r+1}: {re_err}")
+                        time.sleep(0.8)
+
+
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
 
