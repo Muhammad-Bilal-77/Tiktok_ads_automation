@@ -345,6 +345,43 @@ JS_FIND_WEBSITE_RADIO = """
 """
 
 
+JS_FIND_SET_BUDGET = """
+    // Finds the "Set campaign budget" toggle (vi-switch).
+    // Target: data-tea="create_campaign_budget_checkbox" or
+    //         a vi-switch near a label/span with text "Set campaign budget".
+
+    // P1: exact data-tea attribute (most reliable)
+    var sw = document.querySelector('[data-tea="create_campaign_budget_checkbox"]');
+    if (!sw) {
+        // P2: any vi-switch near text "Set campaign budget"
+        var allSwitch = document.querySelectorAll('[role="switch"]');
+        for (var i = 0; i < allSwitch.length; i++) {
+            var parent = allSwitch[i].closest('div') || allSwitch[i].parentElement;
+            var txt = parent ? (parent.textContent || '') : '';
+            if (txt.includes('Set campaign budget')) { sw = allSwitch[i]; break; }
+        }
+    }
+    if (!sw) return null;
+
+    // Already ON?
+    if (sw.getAttribute('aria-checked') === 'true') {
+        return {el: sw, status: 'already_set'};
+    }
+
+    // Click the visual core span (40x22 pill)
+    var core = sw.querySelector('span.vi-switch__core') || sw;
+    core.scrollIntoView({block: 'center'});
+    var r = core.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    return {
+        el: core,
+        status: 'needs_click',
+        x: Math.round(r.x + r.width / 2),
+        y: Math.round(r.y + r.height / 2)
+    };
+"""
+
+
 def find_create_button(driver):
     """
     Find the "+ Create" button which is INSIDE Shadow DOM.
@@ -804,6 +841,101 @@ def main():
                 log_success(f"'Website' selected. Final URL: {driver.current_url}")
 
         time.sleep(1)
+
+        # ── STEP 10: Click 'Set campaign budget' toggle ─────────────────
+        log_step(10, "Scrolling to 'Set campaign budget' toggle and turning it ON...")
+        set_label(driver, "STEP 10: Enabling Set campaign budget...")
+
+        # Scroll to very bottom first so Settings section is rendered
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2.5)
+
+        budget_toggled = False
+
+        for _attempt in range(6):
+            # ── Single JS call: find switch, check state, return coords ──
+            info = driver.execute_script("""
+                // Find the vi-switch for "Set campaign budget"
+                var sw = document.querySelector('[data-tea="create_campaign_budget_checkbox"]');
+                if (!sw) {
+                    // Fallback: look for any [role=switch] near the text
+                    var switches = document.querySelectorAll('[role="switch"]');
+                    for (var i = 0; i < switches.length; i++) {
+                        var region = switches[i].closest('div.switch-container') ||
+                                     switches[i].closest('div') ||
+                                     switches[i].parentElement;
+                        if (region && region.textContent.includes('Set campaign budget')) {
+                            sw = switches[i];
+                            break;
+                        }
+                    }
+                }
+
+                if (!sw) return {found: false};
+
+                // Scroll the switch into view INSTANTLY (not smooth — smooth is async,
+                // getBoundingClientRect would read pre-scroll coordinates)
+                sw.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                // Determine ON/OFF: vi-switch uses is-checked class or input.checked
+                var inp = sw.querySelector('input[type="checkbox"]');
+                var isOn = sw.classList.contains('is-checked') ||
+                           (inp != null && inp.checked) ||
+                           sw.getAttribute('data-tea-campaign_budget_status') === 'true';
+
+                // Return the coordinates of the core pill for ActionChains click
+                var core = sw.querySelector('span.vi-switch__core') || sw;
+                var r = core.getBoundingClientRect();
+                return {
+                    found: true,
+                    on:    isOn,
+                    x:     Math.round(r.left + r.width  / 2),
+                    y:     Math.round(r.top  + r.height / 2)
+                };
+            """)
+
+            if not info or not info.get("found"):
+                log_info(f"[BUDGET] Switch not found in DOM (attempt {_attempt+1}), retrying in 2s...")
+                time.sleep(2)
+                continue
+
+            if info.get("on"):
+                log_success("[BUDGET] Toggle is already ON — done.")
+                budget_toggled = True
+                break
+
+            # ── Toggle is OFF → one physical click via ActionChains ──────
+            cx = info["x"]
+            cy = info["y"]
+            log_info(f"[BUDGET] Toggle is OFF. Physical click at ({cx}, {cy}) attempt {_attempt+1}...")
+            move_mouse_to(driver, cx, cy)
+            time.sleep(0.5)
+            ActionChains(driver).click().perform()
+
+            # Wait for Vue to update its reactive state
+            time.sleep(2.5)
+
+            # Re-check state (separate JS call)
+            is_now_on = driver.execute_script("""
+                var sw = document.querySelector('[data-tea="create_campaign_budget_checkbox"]');
+                if (!sw) return false;
+                var inp = sw.querySelector('input[type="checkbox"]');
+                return sw.classList.contains('is-checked') ||
+                       (inp != null && inp.checked) ||
+                       sw.getAttribute('data-tea-campaign_budget_status') === 'true';
+            """)
+
+            if is_now_on:
+                log_success(f"[BUDGET] Toggle is ON after click at ({cx}, {cy}).")
+                budget_toggled = True
+                break
+
+            log_info(f"[BUDGET] Still OFF after attempt {_attempt+1}.")
+
+        if not budget_toggled:
+            log_error("Could not enable 'Set campaign budget' toggle — continuing.")
+        else:
+            log_success("'Set campaign budget' is ON!")
 
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
