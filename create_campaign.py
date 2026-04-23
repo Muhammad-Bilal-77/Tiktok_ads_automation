@@ -1181,6 +1181,120 @@ def main():
             time.sleep(2)
             log_success(f"[CONTINUE] URL after click: {driver.current_url}")
 
+        # ── Scroll to Budget & Schedule → click Timezone dropdown ──────────
+        log_info("[TIMEZONE] Waiting for Ad Group page to render...")
+        time.sleep(3)
+
+        # Scroll down to the Budget & Schedule section
+        log_info("[TIMEZONE] Scrolling to Budget & Schedule section...")
+        driver.execute_script("""
+            // Try to find the budget/schedule section header by text
+            var allEls = document.querySelectorAll('*');
+            for (var i = 0; i < allEls.length; i++) {
+                var el = allEls[i];
+                var txt = (el.innerText || el.textContent || '').trim();
+                if (txt === 'Budget & schedule' || txt === 'Budget & Schedule') {
+                    el.scrollIntoView({block: 'center', behavior: 'smooth'});
+                    break;
+                }
+            }
+        """)
+        time.sleep(1.5)
+
+        # Also do a raw page scroll down to make sure the section is visible
+        driver.execute_script("window.scrollBy(0, 600);")
+        time.sleep(1)
+
+        # Now locate and click the timezone dropdown
+        log_info("[TIMEZONE] Looking for timezone dropdown...")
+        timezone_clicked = False
+        for _tz in range(8):
+            try:
+                # Return the WRAPPER div (vi-input vi-input--suffix) not the readonly input
+                # The wrapper is the clickable element that opens the dropdown
+                tz_el = driver.execute_script("""
+                    // Primary: walk all elements looking for a label/span with "Time zone" text,
+                    // then return the .vi-input wrapper inside the same .vi-form-item
+                    var allEls = document.querySelectorAll('*');
+                    for (var i = 0; i < allEls.length; i++) {
+                        var el = allEls[i];
+                        // Only look at leaf-ish text nodes to avoid matching huge parents
+                        if (el.children.length > 5) continue;
+                        var t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (t === 'time zone') {
+                            // Walk up to find .vi-form-item ancestor
+                            var formItem = el.closest('.vi-form-item');
+                            if (!formItem) formItem = el.parentElement;
+                            if (formItem) {
+                                // Return the vi-input--suffix wrapper div (the clickable dropdown)
+                                var wrapper = formItem.querySelector('.vi-input.vi-input--suffix, .vi-input--suffix');
+                                if (wrapper) return wrapper;
+                                // Fallback: return the readonly input itself
+                                var inp = formItem.querySelector('input[readonly]');
+                                if (inp) return inp;
+                            }
+                        }
+                    }
+
+                    // Fallback B: scan all .vi-input--suffix wrappers and pick the one
+                    // whose ancestor contains "time zone" text
+                    var wrappers = document.querySelectorAll('.vi-input--suffix');
+                    for (var j = 0; j < wrappers.length; j++) {
+                        var ancestor = wrappers[j].closest('.vi-form-item');
+                        if (ancestor) {
+                            var aText = (ancestor.innerText || '').toLowerCase();
+                            if (aText.includes('time zone') || aText.includes('timezone')) {
+                                return wrappers[j];
+                            }
+                        }
+                    }
+
+                    // Fallback C: any vi-input--suffix that is currently visible in viewport
+                    for (var k = 0; k < wrappers.length; k++) {
+                        var r = wrappers[k].getBoundingClientRect();
+                        if (r.top > 50 && r.bottom < window.innerHeight - 50 && r.width > 100) {
+                            return wrappers[k];
+                        }
+                    }
+                    return null;
+                """)
+
+                if tz_el:
+                    # Scroll it into view and click the wrapper
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", tz_el)
+                    time.sleep(0.6)
+                    # Click 1 — JS click
+                    driver.execute_script("arguments[0].click();", tz_el)
+                    time.sleep(0.3)
+                    # Click 2 — ActionChains move + click
+                    try:
+                        ActionChains(driver).move_to_element(tz_el).click().perform()
+                    except Exception:
+                        pass
+                    time.sleep(0.3)
+                    # Click 3 — ActionChains click again for triple reliability
+                    try:
+                        ActionChains(driver).move_to_element(tz_el).click().perform()
+                    except Exception:
+                        pass
+                    time.sleep(0.3)
+                    log_success(f"[TIMEZONE] Triple-clicked timezone dropdown (attempt {_tz+1})!")
+                    timezone_clicked = True
+                    break
+                else:
+                    log_info(f"[TIMEZONE] Wrapper not found on attempt {_tz+1}, scrolling more...")
+                    driver.execute_script("window.scrollBy(0, 250);")
+                    time.sleep(1)
+            except Exception as tze:
+                log_error(f"[TIMEZONE] Error on attempt {_tz+1}: {tze}")
+                time.sleep(1)
+
+        if not timezone_clicked:
+            log_error("[TIMEZONE] Could not find/click timezone dropdown.")
+        else:
+            time.sleep(1.5)
+            log_success("[TIMEZONE] Timezone dropdown opened.")
+
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
 
