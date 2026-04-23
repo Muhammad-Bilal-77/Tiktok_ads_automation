@@ -1517,7 +1517,75 @@ def main():
 
         set_label(driver, "CREATE READY - Done!")
 
+        # ── Scroll to Ad details → click "Add videos or images" ──────────────
+        log_info("[AD CREATIVE] Waiting for Ad creation page to load...")
+        time.sleep(3)
+
+        # Scroll down to the Ad details section
+        log_info("[AD CREATIVE] Scrolling to 'Ad details' section...")
+        driver.execute_script("""
+            var allEls = document.querySelectorAll('*');
+            for (var i = 0; i < allEls.length; i++) {
+                var t = (allEls[i].innerText || allEls[i].textContent || '').trim();
+                if (t === 'Ad details' || t === 'Ad creative') {
+                    allEls[i].scrollIntoView({block: 'center', behavior: 'smooth'});
+                    break;
+                }
+            }
+        """)
+        time.sleep(1)
+        driver.execute_script("window.scrollBy(0, 300);")
+        time.sleep(1)
+
+        # Click "Add videos or images"
+        log_info("[AD CREATIVE] Looking for 'Add videos or images' button...")
+        add_video_clicked = False
+        for _av in range(6):
+            try:
+                clicked = driver.execute_script("""
+                    // Primary: data-tea-std-component-name="hybrid_creative_add_button"
+                    var btn = document.querySelector('[data-tea-std-component-name="hybrid_creative_add_button"]');
+                    if (btn) {
+                        var r = btn.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) {
+                            btn.scrollIntoView({block: 'center'});
+                            btn.click();
+                            return 'primary';
+                        }
+                    }
+                    // Secondary: button whose span text is "Add videos or images"
+                    var allBtns = document.querySelectorAll('button');
+                    for (var i = 0; i < allBtns.length; i++) {
+                        var t = (allBtns[i].innerText || allBtns[i].textContent || '').trim();
+                        if (t.toLowerCase().includes('add videos or images')) {
+                            allBtns[i].scrollIntoView({block: 'center'});
+                            allBtns[i].click();
+                            return 'text-match';
+                        }
+                    }
+                    return false;
+                """)
+                if clicked:
+                    log_success(f"[AD CREATIVE] Clicked 'Add videos or images' ({clicked})!")
+                    add_video_clicked = True
+                    time.sleep(2)
+                    break
+                else:
+                    log_info(f"[AD CREATIVE] Button not found on attempt {_av+1}, scrolling...")
+                    driver.execute_script("window.scrollBy(0, 200);")
+                    time.sleep(0.8)
+            except Exception as av_err:
+                log_error(f"[AD CREATIVE] Click error on attempt {_av+1}: {av_err}")
+                time.sleep(0.8)
+
+        if not add_video_clicked:
+            log_error("[AD CREATIVE] Could not find/click 'Add videos or images' button.")
+        else:
+            log_info("[AD CREATIVE] Right-side creative sidebar should now be open.")
+            time.sleep(1)
+
         log_success("Step 2 complete!")
+
 
 
         # ── Done ────────────────────────────────────────────
