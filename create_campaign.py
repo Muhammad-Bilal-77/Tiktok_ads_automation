@@ -1457,7 +1457,66 @@ def main():
                         time.sleep(0.8)
 
 
+        # ── Wait for user to confirm Pixel setup, then click Continue ─────────
+        log_info("[PIXEL] Checking if Pixel setup is complete...")
+        pixel_ready = False
+        while not pixel_ready:
+            try:
+                answer = input("\n>>> Is your Pixel setup done? (yes/no): ").strip().lower()
+            except EOFError:
+                answer = "yes"   # non-interactive fallback
+
+            if answer in ("yes", "y"):
+                pixel_ready = True
+            else:
+                log_info("[PIXEL] Waiting 30 seconds, then asking again...")
+                time.sleep(30)
+
+        log_info("[PIXEL] Pixel setup confirmed. Clicking 'Continue'...")
+        continue_clicked = False
+        for _c in range(5):
+            try:
+                clicked = driver.execute_script("""
+                    // Find <ks-button-91g data-testid="common_next_button">
+                    // Try both the shadow element and light DOM
+                    var btns = document.querySelectorAll('[data-testid="common_next_button"]');
+                    for (var i = 0; i < btns.length; i++) {
+                        var r = btns[i].getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) {
+                            btns[i].scrollIntoView({block: 'center'});
+                            btns[i].click();
+                            return true;
+                        }
+                    }
+                    // Fallback: any button whose text is 'Continue'
+                    var allBtns = document.querySelectorAll('button, ks-button-91g, [role="button"]');
+                    for (var j = 0; j < allBtns.length; j++) {
+                        var t = (allBtns[j].innerText || allBtns[j].textContent || '').trim();
+                        if (t === 'Continue') {
+                            allBtns[j].scrollIntoView({block: 'center'});
+                            allBtns[j].click();
+                            return true;
+                        }
+                    }
+                    return false;
+                """)
+                if clicked:
+                    log_success("[PIXEL] Clicked Continue button!")
+                    continue_clicked = True
+                    time.sleep(2)
+                    break
+                else:
+                    log_info(f"[PIXEL] Continue button not found on attempt {_c+1}, retrying...")
+                    time.sleep(1)
+            except Exception as cont_err:
+                log_error(f"[PIXEL] Continue click error on attempt {_c+1}: {cont_err}")
+                time.sleep(1)
+
+        if not continue_clicked:
+            log_error("[PIXEL] Could not click Continue button.")
+
         set_label(driver, "CREATE READY - Done!")
+
         log_success("Step 2 complete!")
 
 
