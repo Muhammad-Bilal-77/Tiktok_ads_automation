@@ -1,0 +1,8 @@
+# TikTok Ads Automation - Dependencies
+# =====================================
+
+# Selenium - Browser automation framework
+selenium>=4.20.0
+
+# webdriver-manager - Auto-downloads and manages browser drivers
+webdriver-manager>=4.0.0

@@ -1,0 +1,20 @@
+"""
+Configuration file for TikTok Ads Automation
+=============================================
+"""
+
+# ── Target URLs ─────────────────────────────────────────────
+TIKTOK_ADS_URL = "https://ads.tiktok.com/i18n/login?lang=en"
+TIKTOK_HOME_URL = "https://ads.tiktok.com/i18n/home?lang=en"
+
+# Campaign URL template — {aadvid} gets replaced with actual account ID
+TIKTOK_CAMPAIGN_URL_TEMPLATE = "https://ads.tiktok.com/i18n/manage/campaign?aadvid={aadvid}&lang=en"
+
+# ── Timeouts (seconds) ──────────────────────────────────────
+PAGE_LOAD_TIMEOUT = 15
+IMPLICIT_WAIT = 3
+EXPLICIT_WAIT = 10
+
+# ── Chrome Profile Path ────────────────────────────────────
+CHROME_USER_DATA_DIR = r"C:\Users\hp\AppData\Local\Google\Chrome\User Data"
+CHROME_PROFILE = "Default"

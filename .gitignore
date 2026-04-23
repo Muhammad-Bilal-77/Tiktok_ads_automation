@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs & screenshots (will be generated later)
+logs/
+screenshots/
+
+# Chrome profile copy (contains sensitive cookies - never commit!)
+chrome_profile_copy/
