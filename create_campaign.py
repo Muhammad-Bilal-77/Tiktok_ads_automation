@@ -12,6 +12,7 @@ Usage:
     python create_campaign.py
 """
 
+import re
 import time
 import json
 
@@ -163,6 +164,12 @@ def interact_with_element_by_js(driver, js_find_code, description="", retries=10
             
             if data.get("found"):
                 spinner.stop(f"Found {description}!")
+
+                # ── already_set: JS click already worked, nothing more to do ──
+                if data.get("status") == "already_set":
+                    log_success(f"[JS-CLICK] '{description}' was set directly by JavaScript.")
+                    return True
+
                 x, y = data["x"], data["y"]
                 
                 # Move smoothly for visual effect
@@ -262,6 +269,7 @@ JS_FIND_CONFIRM_BUTTON = """
     return null;
 """
 
+
 JS_FIND_SALES = """
     // Finds Sales objective under Conversion section
     var labels = document.querySelectorAll('label, div');
@@ -269,12 +277,12 @@ JS_FIND_SALES = """
         var objName = l.getAttribute('data-tea-objective_name');
         var objContent = l.getAttribute('data-tea-objective-content');
         var vObj = l.getAttribute('data-tea-virtual_objective');
-        
+
         if (objName === 'Sales' || objContent === 'Sales' || vObj === 'sales') {
             return {el: l, status: 'needs_click'};
         }
     }
-    
+
     var all = document.querySelectorAll('*');
     for (var a of all) {
         if (a.childElementCount === 0 && a.textContent.trim() === 'Sales') {
@@ -284,6 +292,58 @@ JS_FIND_SALES = """
     }
     return null;
 """
+
+JS_FIND_WEBSITE_RADIO = """
+    // Finds the Website sales-destination radio label.
+    // data-testid is deliberately NOT used — it was mapping to TikTok Shop (wrong element).
+    // Priority order ensures we never match TikTok Shop or Website and app.
+
+    function findWebsiteLabel() {
+        // P1: data-tea-sales_destination="website" — most semantically accurate
+        var el = document.querySelector('label[data-tea-sales_destination="website"]');
+        if (el && el.getBoundingClientRect().width > 0) return el;
+
+        // P2: exact span text "Website" inside a radio label (not "Website and app")
+        var spans = document.querySelectorAll('label[role="radio"] span');
+        for (var i = 0; i < spans.length; i++) {
+            if (spans[i].childElementCount === 0 && spans[i].textContent.trim() === 'Website') {
+                var lbl = spans[i].closest('label[role="radio"]') || spans[i].closest('label');
+                if (lbl && lbl.getBoundingClientRect().width > 0) return lbl;
+            }
+        }
+
+        // P3: combined data-tea-objective_type="3" + data-tea-objective_name="Sales"
+        el = document.querySelector('label[data-tea-objective_type="3"][data-tea-objective_name="Sales"]');
+        if (el && el.getBoundingClientRect().width > 0) return el;
+
+        return null;
+    }
+
+    var label = findWebsiteLabel();
+    if (!label) return null;
+    var rect = label.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    // Already checked?
+    if (label.getAttribute('aria-checked') === 'true' || label.classList.contains('is-checked')) {
+        return {el: label, status: 'already_set'};
+    }
+
+    // JS click on the 16x16 inner dot (Vue's real event target)
+    var innerDot = label.querySelector('span.vi-radio__inner');
+    if (innerDot) { innerDot.click(); } else { label.click(); }
+    // Return the inner dot coords for ActionChains fallback
+    var clickEl = innerDot || label;
+    clickEl.scrollIntoView({block: 'center'});
+    var cr = clickEl.getBoundingClientRect();
+    return {
+        el: clickEl,
+        status: 'needs_click',
+        x: Math.round(cr.x + cr.width / 2),
+        y: Math.round(cr.y + cr.height / 2)
+    };
+"""
+
 
 def find_create_button(driver):
     """
@@ -478,6 +538,14 @@ def main():
 
         log_success("On campaigns page!")
 
+        # ── Extract aadvid NOW (before any navigation happens) ──────────────
+        _m = re.search(r'aadvid=(\d+)', current_url)
+        aadvid = _m.group(1) if _m else None
+        if aadvid:
+            log_success(f"[AADVID] Captured account ID early: {aadvid}")
+        else:
+            log_warning("[AADVID] Could not find aadvid in campaigns URL — fallback navigation may not work.")
+
         # ── Inject cursor overlay ───────────────────────────
         log_step(2, "Injecting cursor overlay...")
         inject_cursor(driver)
@@ -556,18 +624,16 @@ def main():
         if "create/objectives" in new_url.lower() or "creation" in new_url.lower():
             log_success(f"Create clicked successfully! New URL: {new_url}")
         else:
-            log_warning("URL didn't change as expected. The Create button click may have failed or opened a prompt.")
-            import re
-            match = re.search(r'aadvid=(\d+)', current_url)
-            if match:
-                aadvid = match.group(1)
+            log_warning("URL didn't change as expected — navigating directly using stored aadvid.")
+            if aadvid:
                 create_url = f"https://ads.tiktok.com/i18n/nb_creation/create/objectives?aadvid={aadvid}&enter_from=campaign_list"
-                log_info(f"Navigating directly via URL to ensure reliability: {create_url}")
+                log_info(f"Navigating directly via URL: {create_url}")
                 driver.get(create_url)
                 time.sleep(3)
-                log_success(f"Successfully reached creation URL: {driver.current_url}")
+                log_success(f"Reached creation URL: {driver.current_url}")
             else:
-                log_error("Could not parse Account ID (aadvid) to navigate safely.")
+                log_error("No aadvid available — cannot navigate to creation page.")
+                return
 
         inject_cursor(driver)
 
@@ -584,37 +650,164 @@ def main():
 
         final_url = driver.current_url
         if "creation/1nn/create/campaign" in final_url.lower():
-            log_success(f"Reached final full-version creation URL automatically!")
+            log_success(f"Reached full-version creation URL automatically!")
         else:
-            log_warning(f"URL did not match the expected full-version URL: {final_url}. Navigating directly...")
-            import re
-            match = re.search(r'aadvid=(\d+)', final_url)
-            if not match:
-                # check if there's any active variable we saved
-                try: aadvid
-                except NameError: match = None
-            
-            if match:
-                aadvid = match.group(1)
-            try:
-                if aadvid:
-                    full_version_url = f"https://ads.tiktok.com/i18n/creation/1nn/create/campaign?aadvid={aadvid}&enter_from=campaign_list&newbie_enable_back=1&creation_type=create_new"
-                    log_info(f"Going directly to: {full_version_url}")
-                    driver.get(full_version_url)
-                    time.sleep(3)
-                    log_success(f"Successfully loaded true creation URL: {driver.current_url}")
-            except NameError:
-                log_error("Could not find aadvid to navigate to full version safely.")
+            log_warning(f"Not on full-version URL ({final_url}). Navigating directly...")
+            if aadvid:
+                full_version_url = (
+                    f"https://ads.tiktok.com/i18n/creation/1nn/create/campaign"
+                    f"?aadvid={aadvid}&enter_from=campaign_list"
+                    f"&newbie_enable_back=1&creation_type=create_new"
+                )
+                log_info(f"Navigating to: {full_version_url}")
+                driver.get(full_version_url)
+                # Poll until the campaign creation page has loaded (up to 15 s)
+                for _ in range(15):
+                    time.sleep(1)
+                    if "creation/1nn/create/campaign" in driver.current_url.lower():
+                        break
+                log_success(f"Loaded: {driver.current_url}")
+            else:
+                log_error("No aadvid — cannot navigate to full-version URL.")
+                return
 
         # Give the React app a moment to render the objective list
         time.sleep(2)
         
         log_step(8, "Selecting 'Sales' objective...")
-        interact_with_element_by_js(driver, JS_FIND_SALES, "Sales Objective")
+        inject_cursor(driver)
+        sales_clicked = interact_with_element_by_js(
+            driver, JS_FIND_SALES, "Sales Objective", retries=15, must_succeed=True
+        )
+        if not sales_clicked:
+            log_error("Could not select 'Sales' — cannot proceed to Website radio.")
+            return
+
+        # Poll for the Website radio to appear in the DOM (TikTok renders it async)
+        log_step(9, "Waiting for 'Website' radio button to appear in DOM...")
+        set_label(driver, "STEP 9: Waiting for Website radio...")
+        website_appeared = False
+        for _wait in range(20):          # up to 20 s
+            time.sleep(1)
+            check = driver.execute_script("""
+                var el = document.querySelector('[data-testid="sales-destination-index-6AFaYw"]') ||
+                         document.querySelector('label[data-tea-sales_destination="website"]');
+                if (el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+                var labels = document.querySelectorAll('label[role="radio"]');
+                for (var i = 0; i < labels.length; i++) {
+                    var t = labels[i].textContent || '';
+                    if (t.includes('Website') && !t.includes('Website and app')) {
+                        var r2 = labels[i].getBoundingClientRect();
+                        return r2.width > 0 && r2.height > 0;
+                    }
+                }
+                return false;
+            """)
+            if check:
+                log_success(f"Website radio appeared after {_wait + 1}s.")
+                website_appeared = True
+                break
+
+        if not website_appeared:
+            log_error("Website radio never appeared — Sales submenu may not have opened.")
+        else:
+            log_step(9, "Clicking 'Website' radio (triple-attempt)...")
+            set_label(driver, "STEP 9: Clicking Website radio...")
+            website_done = False
+
+            for _attempt in range(8):
+                # ── Attempt A: JS click on innerDot ────────────────────────
+                result_a = driver.execute_script("""
+                    function findWebsiteLabel() {
+                        // P1: semantic attribute (most reliable)
+                        var el = document.querySelector('label[data-tea-sales_destination="website"]');
+                        if (el && el.getBoundingClientRect().width > 0) return el;
+                        // P2: exact span text "Website" inside a radio label
+                        var spans = document.querySelectorAll('label[role="radio"] span');
+                        for (var i = 0; i < spans.length; i++) {
+                            if (spans[i].childElementCount === 0 && spans[i].textContent.trim() === 'Website') {
+                                var lbl = spans[i].closest('label[role="radio"]') || spans[i].closest('label');
+                                if (lbl && lbl.getBoundingClientRect().width > 0) return lbl;
+                            }
+                        }
+                        // P3: objective_type=3 + Sales on a label
+                        el = document.querySelector('label[data-tea-objective_type="3"][data-tea-objective_name="Sales"]');
+                        if (el && el.getBoundingClientRect().width > 0) return el;
+                        return null;
+                    }
+                    var lbl = findWebsiteLabel();
+                    if (!lbl) return null;
+                    lbl.scrollIntoView({block: 'center'});
+                    var dot = lbl.querySelector('span.vi-radio__inner') || lbl;
+                    dot.click();
+                    lbl.click();
+                    var r = dot.getBoundingClientRect();
+                    return {x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2)};
+                """)
+
+                time.sleep(1.2)
+                if "objective_type=3" in driver.current_url:
+                    log_success(f"[ATTEMPT A] Website selected! URL: {driver.current_url}")
+                    website_done = True
+                    break
+
+                # ── Attempt B: ActionChains physical click on innerDot coords
+                if result_a and "x" in result_a:
+                    cx, cy = result_a["x"], result_a["y"]
+                    log_info(f"[ATTEMPT B] ActionChains click at ({cx}, {cy})")
+                    move_mouse_to(driver, cx, cy)
+                    time.sleep(0.3)
+                    ActionChains(driver).click().perform()
+                    time.sleep(1.2)
+                    if "objective_type=3" in driver.current_url:
+                        log_success(f"[ATTEMPT B] Website selected! URL: {driver.current_url}")
+                        website_done = True
+                        break
+
+                # ── Attempt C: dispatchEvent (MouseEvent) ───────────────────
+                driver.execute_script("""
+                    function findWebsiteLabel() {
+                        var el = document.querySelector('label[data-tea-sales_destination="website"]');
+                        if (el && el.getBoundingClientRect().width > 0) return el;
+                        var spans = document.querySelectorAll('label[role="radio"] span');
+                        for (var i = 0; i < spans.length; i++) {
+                            if (spans[i].childElementCount === 0 && spans[i].textContent.trim() === 'Website') {
+                                var lbl = spans[i].closest('label[role="radio"]') || spans[i].closest('label');
+                                if (lbl && lbl.getBoundingClientRect().width > 0) return lbl;
+                            }
+                        }
+                        el = document.querySelector('label[data-tea-objective_type="3"][data-tea-objective_name="Sales"]');
+                        if (el && el.getBoundingClientRect().width > 0) return el;
+                        return null;
+                    }
+                    var lbl = findWebsiteLabel();
+                    if (!lbl) return;
+                    var dot = lbl.querySelector('span.vi-radio__inner') || lbl;
+                    ['mousedown','mouseup','click'].forEach(function(evtType) {
+                        dot.dispatchEvent(new MouseEvent(evtType, {bubbles:true, cancelable:true, view:window}));
+                    });
+                    ['mousedown','mouseup','click'].forEach(function(evtType) {
+                        lbl.dispatchEvent(new MouseEvent(evtType, {bubbles:true, cancelable:true, view:window}));
+                    });
+                """)
+                time.sleep(1.2)
+                if "objective_type=3" in driver.current_url:
+                    log_success(f"[ATTEMPT C] Website selected! URL: {driver.current_url}")
+                    website_done = True
+                    break
+
+                time.sleep(0.5)
+
+            if not website_done:
+                log_error("All 8 attempts to click Website radio failed.")
+            else:
+                log_success(f"'Website' selected. Final URL: {driver.current_url}")
+
         time.sleep(1)
 
         set_label(driver, "CREATE READY - Done!")
         log_success("Step 2 complete!")
+
 
         # ── Done ────────────────────────────────────────────
         print("\n" + "=" * 55)
