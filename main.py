@@ -30,7 +30,7 @@ from config import (
     EXPLICIT_WAIT,
 )
 from browser import create_browser, close_browser, disconnect_browser
-from logger import log_info, log_step, log_error, log_success, log_warning, LoadingSpinner
+from logger import log_info, log_step, log_error, log_success, log_warning, LoadingSpinner, stop_all_spinners
 
 
 # ─────────────────────────────────────────────────────────────
@@ -595,13 +595,17 @@ def open_ads_manager():
             log_error(f"Failed to extract accounts: {extract_err}")
 
         # Ask if they want to start the campaign automation
-        start_again = input("\n>>> Start adding campaign script (create_campaign.py)? (yes/no): ").strip().lower()
+        start_again = input(">>> Start adding campaign script (create_campaign.py)? (yes/no): ").strip().lower()
         if start_again in ['yes', 'y']:
-            log_info("Starting create_campaign.py...")
+            log_info("Starting create_campaign.py in a NEW terminal...")
+            stop_all_spinners()
+            
+            import subprocess
             import sys
-            import os
-            # Cleanly start the create_campaign.py process
-            os.execv(sys.executable, ['python', 'create_campaign.py'])
+            # Launch in a NEW terminal window on Windows
+            subprocess.Popen('start python create_campaign.py', shell=True)
+            # Exit this terminal
+            sys.exit(0)
         else:
             log_info("User selected NO. Exiting.")
             print("  ENTER to disconnect (Chrome stays open).")
@@ -614,6 +618,7 @@ def open_ads_manager():
         log_warning("Stopped (Ctrl+C)")
 
     except Exception as e:
+        stop_all_spinners()
         log_error(f"Error: {e}")
         import traceback
         traceback.print_exc()

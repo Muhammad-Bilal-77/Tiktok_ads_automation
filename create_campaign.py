@@ -27,7 +27,7 @@ from selenium.common.exceptions import (
 )
 
 from browser import connect_browser, disconnect_browser
-from logger import log_info, log_step, log_error, log_success, log_warning, LoadingSpinner
+from logger import log_info, log_step, log_error, log_success, log_warning, LoadingSpinner, stop_all_spinners
 
 
 # ─────────────────────────────────────────────────────────────
@@ -652,7 +652,11 @@ def main():
         log_step(5, "CLICKING Create button...")
         set_label(driver, "CLICKING: + Create")
 
-        click_at(driver, x, y, "+ Create button")
+        # Try to find the element again just before clicking to be fresh
+        from browser import smart_click
+        
+        # We can pass the coordinates from the shadow search
+        smart_click(driver, {'x': x, 'y': y}, "+ Create button")
 
         # ── Wait for result ─────────────────────────────────
         log_step(6, "Waiting for response...")
@@ -2430,11 +2434,14 @@ def main():
         start_again = input("\n>>> Start campaign adding again? (yes/no): ").strip().lower()
         
         if start_again in ['yes', 'y']:
-            log_info("Restarting automation script...")
+            log_info("Restarting automation script in a NEW terminal...")
+            stop_all_spinners()
+            
+            import subprocess
             import sys
-            import os
-            # Cleanly restart the python process
-            os.execv(sys.executable, ['python'] + sys.argv)
+            # Restart in a NEW terminal window on Windows
+            subprocess.Popen(f'start python create_campaign.py', shell=True)
+            sys.exit(0)
         else:
             log_info("User selected NO. Exiting.")
             print("  ENTER to disconnect (Chrome stays open).")
