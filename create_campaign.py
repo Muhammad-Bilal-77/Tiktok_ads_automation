@@ -541,7 +541,24 @@ def find_create_button(driver):
 # Main: Click the Create button
 # ─────────────────────────────────────────────────────────────
 
+def load_budgets():
+    campaign_budget = "1000"
+    adgroup_budget = "100"
+    try:
+        import os
+        if os.path.exists("budget.txt"):
+            with open("budget.txt", "r") as f:
+                for line in f:
+                    if "campaign_budget=" in line:
+                        campaign_budget = line.split("=")[1].strip()
+                    elif "adgroup_budget=" in line:
+                        adgroup_budget = line.split("=")[1].strip()
+    except Exception:
+        pass
+    return campaign_budget, adgroup_budget
+
 def main():
+    campaign_budget, adgroup_budget = load_budgets()
     driver = None
 
     try:
@@ -938,15 +955,15 @@ def main():
         else:
             log_success("'Set campaign budget' is ON!")
 
-        # ── STEP 11: Type 1000 in the campaign budget input ─────────────
+        # ── STEP 11: Type campaign_budget in the campaign budget input ─────────────
         # Exact DOM path from DevTools:
         #   x-input-number-*[class*="budgetInput"]   ← light DOM, findable
         #     └─ #shadow-root
         #         └─ x-input-*                       ← inner host
         #             └─ #shadow-root
         #                 └─ input[type="text"]      ← REAL INPUT
-        log_step(11, "Setting campaign budget to 1000...")
-        set_label(driver, "STEP 11: Typing budget 1000...")
+        log_step(11, f"Setting campaign budget to {campaign_budget}...")
+        set_label(driver, f"STEP 11: Typing budget {campaign_budget}...")
 
         # Scroll to bottom first to ensure budget section is rendered
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -1062,7 +1079,7 @@ def main():
             time.sleep(0.2)
             ActionChains(driver).send_keys(Keys.DELETE).perform()
             time.sleep(0.2)
-            ActionChains(driver).send_keys("1000").perform()
+            ActionChains(driver).send_keys(campaign_budget).perform()
             time.sleep(0.5)
 
             # ── Force value via native setter + fire composed events ───────
@@ -1091,8 +1108,8 @@ def main():
                 if (!inp) return;
 
                 var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-                setter.call(inp, '1000');
-                inp.dispatchEvent(new InputEvent('input',  {bubbles:true, composed:true, data:'1000'}));
+                setter.call(inp, '""" + campaign_budget + """');
+                inp.dispatchEvent(new InputEvent('input',  {bubbles:true, composed:true, data:'""" + campaign_budget + """'}));
                 inp.dispatchEvent(new Event('change', {bubbles:true, composed:true}));
             """)
             time.sleep(0.6)
@@ -1121,7 +1138,7 @@ def main():
             """)
             log_info(f"[BUDGET-INPUT] Value after typing: '{actual}'")
 
-            if actual and "1000" in str(actual).replace(",", ""):
+            if actual and str(campaign_budget) in str(actual).replace(",", ""):
                 log_success(f"[BUDGET-INPUT] Budget = '{actual}' ✓")
                 budget_input_done = True
                 break
@@ -1130,9 +1147,9 @@ def main():
             time.sleep(1)
 
         if not budget_input_done:
-            log_error("Could not set budget to 1000 — continuing.")
+            log_error(f"Could not set budget to {campaign_budget} — continuing.")
         else:
-            log_success("Campaign budget = 1000.")
+            log_success(f"Campaign budget = {campaign_budget}.")
 
         # ── Click Continue button ────────────────────────────────────────────
         log_info("[CONTINUE] Looking for Continue button...")
@@ -1205,7 +1222,7 @@ def main():
         driver.execute_script("window.scrollBy(0, 600);")
         time.sleep(1)
 
-        # ── Fill Ad Group Budget input with 100 ──────────────────────────────
+        # ── Fill Ad Group Budget input with adgroup_budget ──────────────────────────────
         log_info("[ADGROUP BUDGET] Looking for budget input above Time zone...")
         budget_filled = False
         for _ab in range(5):
@@ -1268,10 +1285,10 @@ def main():
                     time.sleep(0.2)
                     ActionChains(driver).send_keys(Keys.DELETE).perform()
                     time.sleep(0.2)
-                    # Type 100
-                    ActionChains(driver).send_keys("100").perform()
+                    # Type budget
+                    ActionChains(driver).send_keys(adgroup_budget).perform()
                     time.sleep(0.3)
-                    log_success(f"[ADGROUP BUDGET] Typed '100' in budget input (attempt {_ab+1})!")
+                    log_success(f"[ADGROUP BUDGET] Typed '{adgroup_budget}' in budget input (attempt {_ab+1})!")
                     budget_filled = True
                     break
                 else:

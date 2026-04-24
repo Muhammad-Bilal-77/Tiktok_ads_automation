@@ -1,0 +1,2 @@
+campaign_budget=100
+adgroup_budget=100
