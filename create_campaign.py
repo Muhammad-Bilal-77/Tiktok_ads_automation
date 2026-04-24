@@ -2007,6 +2007,84 @@ def main():
                                 if not cta_opened:
                                     log_error('[CTA] Could not open CTA dropdown.')
 
+                                # -- Type 'Apply now' in search box and select it --
+                                if cta_opened:
+                                    log_info('[CTA] Typing \'Apply now\' in dropdown search...')
+                                    time.sleep(0.8)
+                                    cta_selected = False
+                                    try:
+                                        # Find the search input inside the now-open dropdown
+                                        search_inp = None
+                                        for sel in [
+                                            'input.vi-input__inner[placeholder="Search or select"]',
+                                            'input[data-testid*="select-tree-index"]',
+                                            '.vi-select-tree-dropdown input',
+                                            '.vi-select-tree-dropdown-input input',
+                                        ]:
+                                            try:
+                                                for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                                                    r = driver.execute_script(
+                                                        'var r=arguments[0].getBoundingClientRect();'
+                                                        'return r.width>0&&r.height>0;', el)
+                                                    if r:
+                                                        search_inp = el
+                                                        break
+                                            except Exception:
+                                                pass
+                                            if search_inp:
+                                                break
+
+                                        if search_inp:
+                                            search_inp.click()
+                                            time.sleep(0.3)
+                                            search_inp.send_keys('Apply now')
+                                            log_info('[CTA] Typed \'Apply now\' in search box.')
+                                            time.sleep(1.5)  # wait for results to filter
+
+                                            # Click the matching option using specific selectors
+                                            # Structure: label[role=checkbox] > span > div > div.index_nodeContent > div "Apply now"
+                                            xpaths_opt = [
+                                                # Checkbox label containing "Apply now"
+                                                '//label[@role="checkbox" and contains(.,"Apply now")]',
+                                                # nodeContent div with exact text
+                                                '//*[contains(@class,"index_nodeContent") and normalize-space(.)="Apply now"]',
+                                                # Any div with exact text "Apply now" in the dropdown
+                                                '//div[contains(@class,"vi-select-tree-dropdown")]//div[normalize-space(.)="Apply now"]',
+                                                # Generic: any visible element with text "Apply now"
+                                                '//*[normalize-space(.)="Apply now"]',
+                                            ]
+                                            for xp_opt in xpaths_opt:
+                                                if cta_selected:
+                                                    break
+                                                try:
+                                                    for opt_el in driver.find_elements(By.XPATH, xp_opt):
+                                                        r = driver.execute_script(
+                                                            'var r=arguments[0].getBoundingClientRect();'
+                                                            'return r.width>0&&r.height>0;', opt_el)
+                                                        if r:
+                                                            driver.execute_script(
+                                                                'arguments[0].scrollIntoView({block:"nearest"});',
+                                                                opt_el)
+                                                            time.sleep(0.2)
+                                                            driver.execute_script('arguments[0].click();', opt_el)
+                                                            log_success(f'[CTA] Selected \'Apply now\' ({xp_opt[:40]})!')
+                                                            cta_selected = True
+                                                            break
+                                                except Exception:
+                                                    pass
+
+                                        else:
+                                            log_error('[CTA] Search input not found in dropdown.')
+
+                                    except Exception as cs_err:
+                                        log_error(f'[CTA] Select error: {cs_err}')
+
+                                    if not cta_selected:
+                                        log_error('[CTA] Could not select \'Apply now\'.')
+                                    else:
+                                        time.sleep(0.5)
+
+
 
 
         log_success("Step 2 complete!")
