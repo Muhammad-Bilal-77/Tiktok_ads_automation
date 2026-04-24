@@ -515,49 +515,97 @@ def open_ads_manager():
 
     try:
         print("\n" + "=" * 50)
-        print("  TikTok Ads Automation [MOUSE + CURSOR]")
+        print("  TikTok Ads Automation [MAIN LOGIN & ROUTING]")
         print("=" * 50 + "\n")
 
-        driver = create_browser()
+        # Try to connect first
+        try:
+            from browser import connect_browser
+            driver = connect_browser()
+            log_info("Successfully connected to existing Chrome.")
+        except Exception:
+            log_info("No existing Chrome found on port 9222. Launching new Chrome...")
+            driver = create_browser()
 
         # Open login page
-        log_step(4, "Opening TikTok Ads...")
+        log_step(1, "Opening TikTok Ads...")
         fast_navigate(driver, TIKTOK_ADS_URL, "TikTok Ads login")
         inject_cursor(driver)
 
         # Wait for login
         wait_for_login(driver)
+        
+        # Go to home to extract ads manager accounts
+        log_step(2, "Navigating to Account Selection...")
+        fast_navigate(driver, "https://ads.tiktok.com/i18n/home", "Account Selection")
+        time.sleep(2) # Give the page a moment to render
+        
+        log_info("Extracting Ads Manager accounts from the page...")
+        try:
+            page_text = driver.execute_script("return document.body.innerText;")
+            ads_section = page_text.split("Ads Manager (", 1)[1] if "Ads Manager (" in page_text else page_text
+            
+            accounts = []
+            matches = re.finditer(r'(?:^|\n)([^\n]+?)\s*\nID:\s*(\d+)', ads_section, re.MULTILINE)
+            for match in matches:
+                accounts.append(f"{match.group(1).strip()} -> {match.group(2).strip()}")
+                
+            print("\nHow would you like to select your campaign?")
+            print("  1) Choose from the extracted menu")
+            print("  2) Select manually in the browser")
+            method_choice = input(">>> (1/2): ").strip()
+            
+            if method_choice == '1' and accounts:
+                print("\n" + "=" * 50)
+                print("             ADS MANAGER ACCOUNTS")
+                print("=" * 50)
+                for i, acc in enumerate(accounts):
+                    print(f"[{i+1}] {acc}")
+                print("=" * 50)
+                
+                while True:
+                    acc_choice = input(f"\n>>> Select an account number (1-{len(accounts)}): ").strip()
+                    try:
+                        idx = int(acc_choice) - 1
+                        if 0 <= idx < len(accounts):
+                            chosen_acc = accounts[idx]
+                            chosen_id = chosen_acc.split("->")[1].strip()
+                            print(f"\nYou selected: {chosen_acc}")
+                            
+                            target_url = f"https://ads.tiktok.com/i18n/manage/campaign?aadvid={chosen_id}"
+                            print(f"Redirecting browser to: {target_url}")
+                            driver.get(target_url)
+                            time.sleep(3)
+                            break
+                        else:
+                            print("Invalid number. Try again.")
+                    except ValueError:
+                        print("Please enter a valid number.")
+            else:
+                if method_choice == '1' and not accounts:
+                    print("No accounts found to display in menu. Switching to manual mode.")
+                while True:
+                    done_manual = input("\n>>> Are you done manually going to the campaign page? (yes/no): ").strip().lower()
+                    if done_manual in ['yes', 'y']:
+                        break
+                    else:
+                        print("Waiting... Please manually click and navigate to the campaign page in Chrome.")
+                        time.sleep(1)
+        except Exception as extract_err:
+            log_error(f"Failed to extract accounts: {extract_err}")
 
-        # Select Ads Manager account with MOUSE — returns aadvid
-        aadvid = select_ads_manager_account(driver)
-        log_info(f"Account ID (aadvid): {aadvid}")
-
-        # Wait a moment for dashboard to load
-        time.sleep(2)
-
-        # Go to Campaigns with the correct aadvid
-        go_to_campaigns(driver, aadvid)
-        inject_cursor(driver)
-        update_cursor_label(driver, "CAMPAIGNS PAGE - READY!")
-
-        # Done — keep Chrome open for next script!
-        print("\n" + "=" * 50)
-        print("  DONE! Campaigns page is open.")
-        print("  URL: " + driver.current_url)
-        print("")
-        print("  Chrome stays open. You can now run:")
-        print("    python create_campaign.py")
-        print("")
-        print("  ENTER = disconnect (Chrome stays open)")
-        print("  Type 'close' = close Chrome")
-        print("=" * 50 + "\n")
-
-        answer = input(">>> ").strip().lower()
-
-        if answer == "close":
-            close_browser(driver)
-            driver = None
-        # else: disconnect only (Chrome stays open)
+        # Ask if they want to start the campaign automation
+        start_again = input("\n>>> Start adding campaign script (create_campaign.py)? (yes/no): ").strip().lower()
+        if start_again in ['yes', 'y']:
+            log_info("Starting create_campaign.py...")
+            import sys
+            import os
+            # Cleanly start the create_campaign.py process
+            os.execv(sys.executable, ['python', 'create_campaign.py'])
+        else:
+            log_info("User selected NO. Exiting.")
+            print("  ENTER to disconnect (Chrome stays open).")
+            input(">>> ")
 
     except WebDriverException as e:
         log_error(f"WebDriver error: {e}")
@@ -572,6 +620,7 @@ def open_ads_manager():
 
     finally:
         if driver:
+            from browser import disconnect_browser
             disconnect_browser(driver)
         log_info("Done.")
 
