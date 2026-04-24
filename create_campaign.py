@@ -1906,6 +1906,62 @@ def main():
                             if not confirmed:
                                 log_error('[CONFIRM] Could not click sidebar Confirm after 6 attempts.')
 
+                        # -- Scroll to 'Call to action' and click clear (right-icon) --
+                        if confirmed:
+                            log_info('[CTA] Scrolling to Call to action section...')
+                            time.sleep(1.5)
+                            try:
+                                # Scroll the page down to expose the CTA section
+                                driver.execute_script("window.scrollBy(0, 400);")
+                                time.sleep(1)
+                            except Exception:
+                                pass
+
+                            cta_cleared = False
+                            for _cta in range(6):
+                                try:
+                                    cta_el = None
+                                    # Strategy A: i.right-icon that is NOT the arrow-down (= clear btn)
+                                    # inside the vi-select-tree-inside-container
+                                    selectors = [
+                                        'i.right-icon:not(.vi-icon-arrow-down)',
+                                        '[data-testid*="select-tree-container-inside"].right-icon',
+                                        'i[data-testid*="select-tree-container-inside"]',
+                                    ]
+                                    for sel in selectors:
+                                        try:
+                                            for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                                                r = driver.execute_script(
+                                                    'var r=arguments[0].getBoundingClientRect();'
+                                                    'return r.width>=0&&r.height>=0&&r.top>=0;', el)
+                                                if r:
+                                                    cta_el = el
+                                                    break
+                                        except Exception:
+                                            pass
+                                        if cta_el:
+                                            break
+
+                                    if cta_el:
+                                        driver.execute_script(
+                                            'arguments[0].scrollIntoView({block:"center"});', cta_el)
+                                        time.sleep(0.3)
+                                        driver.execute_script('arguments[0].click();', cta_el)
+                                        log_success('[CTA] Clicked Call to action clear icon!')
+                                        cta_cleared = True
+                                        time.sleep(1)
+                                        break
+                                    else:
+                                        log_info(f'[CTA] Clear icon not found attempt {_cta+1}...')
+                                        time.sleep(0.8)
+                                except Exception as cta_err:
+                                    log_error(f'[CTA] Error attempt {_cta+1}: {cta_err}')
+                                    time.sleep(0.8)
+
+                            if not cta_cleared:
+                                log_error('[CTA] Could not click Call to action clear icon.')
+
+
         log_success("Step 2 complete!")
 
 
