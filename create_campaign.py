@@ -1623,8 +1623,52 @@ def main():
 
             if not tiktok_tab_clicked:
                 log_error("[TIKTOK POSTS] Could not click TikTok posts tab.")
+            else:
+                # ── Click "Add post" button (middle-right of sidebar) ─────────
+                log_info("[ADD POST] Looking for 'Add post' button...")
+                add_post_clicked = False
+                for _ap in range(6):
+                    try:
+                        clicked = driver.execute_script("""
+                            // Primary: vi-button--dark whose text is "Add post"
+                            var darkBtns = document.querySelectorAll('button.vi-button--dark');
+                            for (var i = 0; i < darkBtns.length; i++) {
+                                var t = (darkBtns[i].innerText || darkBtns[i].textContent || '').trim();
+                                if (t.toLowerCase() === 'add post') {
+                                    darkBtns[i].scrollIntoView({block: 'center'});
+                                    darkBtns[i].click();
+                                    return 'dark-btn';
+                                }
+                            }
+                            // Fallback: any button whose text is "Add post"
+                            var allBtns = document.querySelectorAll('button');
+                            for (var j = 0; j < allBtns.length; j++) {
+                                var t2 = (allBtns[j].innerText || allBtns[j].textContent || '').trim();
+                                if (t2.toLowerCase() === 'add post') {
+                                    allBtns[j].scrollIntoView({block: 'center'});
+                                    allBtns[j].click();
+                                    return 'text-match';
+                                }
+                            }
+                            return false;
+                        """)
+                        if clicked:
+                            log_success(f"[ADD POST] Clicked 'Add post' button ({clicked})!")
+                            add_post_clicked = True
+                            time.sleep(1.5)
+                            break
+                        else:
+                            log_info(f"[ADD POST] Button not found on attempt {_ap+1}, waiting...")
+                            time.sleep(0.8)
+                    except Exception as ap_err:
+                        log_error(f"[ADD POST] Error on attempt {_ap+1}: {ap_err}")
+                        time.sleep(0.8)
+
+                if not add_post_clicked:
+                    log_error("[ADD POST] Could not click 'Add post' button.")
 
         log_success("Step 2 complete!")
+
 
 
 
