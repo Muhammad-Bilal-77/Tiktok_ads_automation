@@ -2203,12 +2203,48 @@ def main():
 
         # ── Done ────────────────────────────────────────────
         print("\n" + "=" * 55)
-        print("  DONE! '+ Create' button clicked.")
-        print("  URL: " + driver.current_url)
-        print("  ENTER to disconnect (Chrome stays open).")
+        print("  DONE! Campaign published.")
         print("=" * 55 + "\n")
 
-        input(">>> ")
+        log_info("Automation cycle complete.")
+        
+        # Ask where to navigate next
+        print("\nWhere do you want to go next?")
+        print("  1) Campaign page")
+        print("  2) Account selection")
+        nav_choice = input(">>> (1/2): ").strip().lower()
+
+        target_url = "https://ads.tiktok.com/i18n/manage/campaign"
+        if nav_choice in ['2', 'account', 'a']:
+            target_url = "https://ads.tiktok.com/i18n/home"
+            log_info("Navigating to Account Selection...")
+        else:
+            if aadvid:
+                target_url += f"?aadvid={aadvid}"
+            log_info("Navigating to Campaign Page...")
+
+        # Open target URL in a new tab and switch to it
+        try:
+            driver.execute_script(f"window.open('{target_url}', '_blank');")
+            time.sleep(1)
+            driver.switch_to.window(driver.window_handles[-1])
+            time.sleep(3)
+        except Exception as win_err:
+            log_error(f"Failed to open new tab: {win_err}")
+
+        # Ask if they want to start the campaign automation again
+        start_again = input("\n>>> Start campaign adding again? (yes/no): ").strip().lower()
+        
+        if start_again in ['yes', 'y']:
+            log_info("Restarting automation script...")
+            import sys
+            import os
+            # Cleanly restart the python process
+            os.execv(sys.executable, ['python'] + sys.argv)
+        else:
+            log_info("User selected NO. Exiting.")
+            print("  ENTER to disconnect (Chrome stays open).")
+            input(">>> ")
 
     except WebDriverException as e:
         log_error(f"WebDriver error: {e}")
