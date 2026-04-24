@@ -1775,15 +1775,82 @@ def main():
                                     return false;
                                 """)
                                 if dlg_cont:
-                                    log_success(f"[VIDEO CODES] Clicked dialog Continue ({dlg_cont})!")
+                                    log_success(f'[DIALOG1] Clicked Continue in Authorize dialog ({dlg_cont})!')
                                     time.sleep(2)
                                     break
                                 else:
                                     log_info(f"[VIDEO CODES] Continue not found in dialog on attempt {_dc+1}...")
                                     time.sleep(0.8)
                             except Exception as dc_err:
-                                log_error(f"[VIDEO CODES] Dialog Continue error: {dc_err}")
+                                log_error(f"[VIDEO CODES] 'Add TikTok posts' error: {dc_err}")
                                 time.sleep(0.8)
+
+
+
+                        # -- Dialog 2: Confirm TikTok posts -> click 'Add TikTok posts' --
+                        log_info('[DIALOG2] Waiting for Confirm TikTok posts dialog...')
+                        time.sleep(2.5)
+                        d2_clicked = False
+                        for _d2 in range(8):
+                            try:
+                                # Strategy A: Selenium XPath + JS click (no offsetParent issue)
+                                btn_el = None
+                                for xp in [
+                                    "//button[normalize-space(.)='Add TikTok posts']",
+                                    "//button[contains(.,'Add TikTok posts')]",
+                                    "//button[contains(@data-testid,'native-batch-authorize') and contains(@class,'vi-button--primary')]",
+                                ]:
+                                    try:
+                                        for el in driver.find_elements(By.XPATH, xp):
+                                            r = driver.execute_script('var r=arguments[0].getBoundingClientRect();return r.width>0&&r.height>0;', el)
+                                            if r:
+                                                btn_el = el
+                                                break
+                                        if btn_el:
+                                            break
+                                    except Exception:
+                                        pass
+
+                                if btn_el:
+                                    driver.execute_script('arguments[0].scrollIntoView({block:"center"});', btn_el)
+                                    time.sleep(0.2)
+                                    driver.execute_script('arguments[0].click();', btn_el)
+                                    log_success('[DIALOG2] Clicked Add TikTok posts (Selenium XPath JS-click)!')
+                                    d2_clicked = True
+                                    time.sleep(2)
+                                    break
+
+                                # Strategy B: pure JS with getBoundingClientRect visibility check
+                                sel_str = '[data-testid*="native-batch-authorize"][class*="vi-button--primary"],button.vi-button--primary'
+                                d2_js = driver.execute_script(
+                                    'var btns=document.querySelectorAll(arguments[0]);'
+                                    'for(var i=0;i<btns.length;i++){'
+                                    '  var r=btns[i].getBoundingClientRect();'
+                                    '  if(r.width>0&&r.height>0){btns[i].click();return "rect-primary";}'
+                                    '}'
+                                    'var all=document.querySelectorAll("button");'
+                                    'for(var j=0;j<all.length;j++){'
+                                    '  var t=(all[j].innerText||"").trim().toLowerCase();'
+                                    '  var r2=all[j].getBoundingClientRect();'
+                                    '  if(t.indexOf("add tiktok")!==-1&&r2.width>0){all[j].click();return "text-match";}'
+                                    '}'
+                                    'return false;',
+                                    sel_str
+                                )
+                                if d2_js:
+                                    log_success(f'[DIALOG2] Clicked Add TikTok posts ({d2_js})!')
+                                    d2_clicked = True
+                                    time.sleep(2)
+                                    break
+                                else:
+                                    log_info(f'[DIALOG2] Button not found attempt {_d2+1}, retrying...')
+                                    time.sleep(1)
+                            except Exception as d2_err:
+                                log_error(f'[DIALOG2] Error attempt {_d2+1}: {d2_err}')
+                                time.sleep(1)
+
+                        if not d2_clicked:
+                            log_error('[DIALOG2] Could not click Add TikTok posts after 8 attempts.')
 
         log_success("Step 2 complete!")
 
