@@ -2083,6 +2083,31 @@ def main():
                                         log_error('[CTA] Could not select \'Apply now\'.')
                                     else:
                                         time.sleep(0.5)
+                                        # -- Close dropdown: scroll down, move to left blank area, click twice --
+                                        log_info('[CTA] Closing dropdown (scroll + click left area)...')
+                                        try:
+                                            # Scroll down a little to shift focus away from dropdown
+                                            driver.execute_script("window.scrollBy(0, 150);")
+                                            time.sleep(0.4)
+                                            # Move mouse to left blank area of the page (x=100, y=500)
+                                            ActionChains(driver) \
+                                                .move_by_offset(-200, 100) \
+                                                .perform()
+                                            time.sleep(0.2)
+                                            # Click twice on that neutral area
+                                            ActionChains(driver).click().perform()
+                                            time.sleep(0.2)
+                                            ActionChains(driver).click().perform()
+                                            time.sleep(0.3)
+                                            log_success('[CTA] Dropdown dismissed.')
+                                        except Exception as dismiss_err:
+                                            log_error(f'[CTA] Dismiss error: {dismiss_err}')
+                                            # Fallback: Escape key
+                                            try:
+                                                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                                            except Exception:
+                                                pass
+                                        time.sleep(0.5)
 
 
 
