@@ -2110,7 +2110,90 @@ def main():
                                         time.sleep(0.5)
 
 
+                        # ── Click 'Publish all' button (Shadow DOM: ks-button-91g) ──────
+                        log_info('[PUBLISH] Clicking Publish all button...')
+                        time.sleep(1.5)
+                        published = False
+                        for _pub in range(6):
+                            try:
+                                pub_result = driver.execute_script("""
+                                    // Strategy 1: Pierce shadow DOM of ks-tooltip-91g[title='Publish all']
+                                    var tooltips = document.querySelectorAll('ks-tooltip-91g');
+                                    for (var i = 0; i < tooltips.length; i++) {
+                                        var tt = tooltips[i];
+                                        if ((tt.getAttribute('title') || '').toLowerCase().indexOf('publish') !== -1) {
+                                            // Try clicking the custom element directly first
+                                            var r = tt.getBoundingClientRect();
+                                            if (r.width > 0) {
+                                                // Pierce into shadow root
+                                                var sr = tt.shadowRoot;
+                                                if (sr) {
+                                                    var btn = sr.querySelector('ks-button-91g[data-testid="common_next_button"]')
+                                                           || sr.querySelector('ks-button-91g')
+                                                           || sr.querySelector('[data-testid="common_next_button"]');
+                                                    if (btn) { btn.click(); return 'shadow-ks-btn'; }
+                                                }
+                                                tt.click();
+                                                return 'tooltip-click';
+                                            }
+                                        }
+                                    }
+                                    // Strategy 2: data-testid="common_next_button" direct
+                                    var btn2 = document.querySelector('[data-testid="common_next_button"]');
+                                    if (btn2) { btn2.click(); return 'testid-direct'; }
+                                    // Strategy 3: any ks-button-91g visible
+                                    var ksBtns = document.querySelectorAll('ks-button-91g');
+                                    for (var j = 0; j < ksBtns.length; j++) {
+                                        var rb = ksBtns[j].getBoundingClientRect();
+                                        if (rb.width > 0 && rb.height > 0) {
+                                            ksBtns[j].click();
+                                            return 'ks-btn-' + j;
+                                        }
+                                    }
+                                    // Strategy 4: XPath text 'Publish all'
+                                    return null;
+                                """)
 
+                                if pub_result:
+                                    log_success(f'[PUBLISH] Clicked Publish all ({pub_result})!')
+                                    published = True
+                                    time.sleep(2)
+                                    break
+                                else:
+                                    # XPath fallback via Selenium
+                                    try:
+                                        for xp_pub in [
+                                            '//button[normalize-space(.)="Publish all"]',
+                                            '//*[contains(@title,"Publish all")]',
+                                            '//*[normalize-space(.)="Publish all"]',
+                                        ]:
+                                            els = driver.find_elements(By.XPATH, xp_pub)
+                                            for el in els:
+                                                r = driver.execute_script(
+                                                    'var r=arguments[0].getBoundingClientRect();'
+                                                    'return r.width>0&&r.height>0;', el)
+                                                if r:
+                                                    driver.execute_script('arguments[0].click();', el)
+                                                    log_success('[PUBLISH] Clicked Publish all (XPath)!')
+                                                    published = True
+                                                    break
+                                            if published:
+                                                break
+                                    except Exception:
+                                        pass
+
+                                if published:
+                                    time.sleep(2)
+                                    break
+                                else:
+                                    log_info(f'[PUBLISH] Publish all not found attempt {_pub+1}...')
+                                    time.sleep(1)
+                            except Exception as pub_err:
+                                log_error(f'[PUBLISH] Error attempt {_pub+1}: {pub_err}')
+                                time.sleep(1)
+
+                        if not published:
+                            log_error('[PUBLISH] Could not click Publish all after 6 attempts.')
 
         log_success("Step 2 complete!")
 
