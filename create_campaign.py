@@ -1451,16 +1451,6 @@ def main():
                                     return true;
                                 }
                             }
-                            // Fallback: any visible li/div whose text has 'pakistan'
-                            var all = document.querySelectorAll('li, [role="option"]');
-                            for (var j = 0; j < all.length; j++) {
-                                var t = (all[j].innerText || '').toLowerCase();
-                                if (t.includes('pakistan')) {
-                                    all[j].scrollIntoView({block:'center'});
-                                    all[j].click();
-                                    return true;
-                                }
-                            }
                             return false;
                         """)
                         if option_clicked:
@@ -1472,6 +1462,136 @@ def main():
                     except Exception as re_err:
                         log_error(f"[TIMEZONE] Option click error on attempt {_r+1}: {re_err}")
                         time.sleep(0.8)
+        log_info("[START TIME] Setting start time to Today...")
+        time.sleep(1)
+        
+        # 1. Click the calendar icon (Deep Shadow DOM search)
+        calendar_clicked = False
+        for _st in range(8):
+            try:
+                cal_el = driver.execute_script("""
+                    function findDeep(root, selector) {
+                        var el = root.querySelector(selector);
+                        if (el) return el;
+                        var all = root.querySelectorAll('*');
+                        for (var i = 0; i < all.length; i++) {
+                            if (all[i].shadowRoot) {
+                                var found = findDeep(all[i].shadowRoot, selector);
+                                if (found) return found;
+                            }
+                        }
+                        return null;
+                    }
+                    // Try multiple strategies to find the schedule input
+                    var calIcon = findDeep(document, 'input[placeholder="Start date"]');
+                    if (!calIcon) calIcon = findDeep(document, 'input[placeholder="Select date"]');
+                    if (!calIcon) calIcon = findDeep(document, 'ks-icon-calendar');
+                    if (!calIcon) calIcon = findDeep(document, '.ttam-schedule-continuous-timepicker input');
+                    if (!calIcon) {
+                        // Look for any input inside a div that looks like a schedule picker
+                        var scheduleDiv = findDeep(document, '[class*="schedule-continuous"]');
+                        if (scheduleDiv) calIcon = scheduleDiv.querySelector('input');
+                    }
+
+                    if (calIcon) {
+                        calIcon.scrollIntoView({block:'center'});
+                        return calIcon;
+                    }
+                    return null;
+                """)
+                if cal_el:
+                    time.sleep(1.0)
+                    # Triple click pattern for maximum reliability
+                    driver.execute_script("arguments[0].click();", cal_el)
+                    time.sleep(0.5)
+                    try:
+                        ActionChains(driver).move_to_element(cal_el).click().perform()
+                    except: pass
+                    time.sleep(0.5)
+                    try:
+                        ActionChains(driver).move_to_element(cal_el).click().perform()
+                    except: pass
+                    
+                    log_success("[START TIME] Clicked calendar icon.")
+                    calendar_clicked = True
+                    break
+                else:
+                    log_info(f"[START TIME] Calendar icon not found (attempt {_st+1}), scrolling...")
+                    driver.execute_script("window.scrollBy(0, 200);")
+                    time.sleep(1.5)
+            except Exception as e:
+                log_error(f"[START TIME] Error clicking calendar: {e}")
+                time.sleep(1)
+                
+        if calendar_clicked:
+            time.sleep(2.0) # Wait for popup to open
+            
+            # 2. Click 'Now' / 'Today' button then 'OK' / 'Confirm' button
+            for btn_candidates in [["Now", "Today"], ["OK", "Confirm"]]:
+                btn_clicked = False
+                for _b in range(8):
+                    try:
+                        btn_el = driver.execute_script(f'''
+                            var candidates = {btn_candidates};
+                            function findDeepText(root, text) {{
+                                var els = root.querySelectorAll('*');
+                                for(var i=0; i<els.length; i++) {{
+                                    var el = els[i];
+                                    if(el.shadowRoot) {{
+                                        var found = findDeepText(el.shadowRoot, text);
+                                        if(found) return found;
+                                    }}
+                                    // Check if text matches (trimmed and case-insensitive)
+                                    var t = (el.innerText || el.textContent || "").trim().toLowerCase();
+                                    if(el.children.length === 0 && t === text.toLowerCase()) {{
+                                        return el;
+                                    }}
+                                }}
+                                return null;
+                            }}
+                            
+                            for (var c = 0; c < candidates.length; c++) {{
+                                var target = findDeepText(document, candidates[c]);
+                                if (!target) {{
+                                    // Fallback: look for buttons with specific class and text
+                                    var allBtns = document.querySelectorAll('.vi-picker-panel__link-btn, .vi-button');
+                                    for(var j=0; j<allBtns.length; j++) {{
+                                        var bt = (allBtns[j].innerText || "").trim().toLowerCase();
+                                        if(bt === candidates[c].toLowerCase()) {{
+                                            target = allBtns[j];
+                                            break;
+                                        }}
+                                    }}
+                                }}
+
+                                if (target) {{
+                                    var clickTarget = target.closest('button, [role="button"], ks-button-91g') || target;
+                                    clickTarget.scrollIntoView({{block:'center'}});
+                                    return clickTarget;
+                                }}
+                            }}
+                            return null;
+                        ''')
+                        if btn_el:
+                            time.sleep(0.5)
+                            driver.execute_script("arguments[0].click();", btn_el)
+                            time.sleep(0.5)
+                            try:
+                                ActionChains(driver).move_to_element(btn_el).click().perform()
+                            except: pass
+                            log_info(f"[START TIME] Clicked '{btn_candidates}' button.")
+                            btn_clicked = True
+                            break
+                        else:
+                            time.sleep(1)
+                    except Exception as e:
+                        log_error(f"[START TIME] Error clicking '{btn_candidates}': {e}")
+                        time.sleep(1)
+                time.sleep(1.5) # wait between button clicks
+                
+            log_success("[START TIME] Start time configuration complete.")
+        else:
+            log_error("[START TIME] Could not find or click calendar icon.")
 
 
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
