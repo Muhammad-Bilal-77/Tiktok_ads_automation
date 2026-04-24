@@ -16,5 +16,15 @@ IMPLICIT_WAIT = 3
 EXPLICIT_WAIT = 10
 
 # ── Chrome Profile Path ────────────────────────────────────
-CHROME_USER_DATA_DIR = r"C:\Users\hp\AppData\Local\Google\Chrome\User Data"
+import os
+import platform
+
+if platform.system() == "Windows":
+    # Auto-detect default Windows Chrome path
+    CHROME_USER_DATA_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data')
+else:
+    # Fallback/Placeholder for other OS
+    CHROME_USER_DATA_DIR = ""
+
 CHROME_PROFILE = "Default"
+
