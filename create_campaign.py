@@ -2232,6 +2232,63 @@ def main():
         except Exception as win_err:
             log_error(f"Failed to open new tab: {win_err}")
 
+        # If they went to the Account Selection page, run the extraction logic automatically
+        if nav_choice in ['2', 'account', 'a']:
+            log_info("Extracting Ads Manager accounts from the page...")
+            time.sleep(2) # Give the page a moment to render
+            try:
+                page_text = driver.execute_script("return document.body.innerText;")
+                ads_section = page_text.split("Ads Manager (", 1)[1] if "Ads Manager (" in page_text else page_text
+                
+                accounts = []
+                matches = re.finditer(r'(?:^|\n)([^\n]+?)\s*\nID:\s*(\d+)', ads_section, re.MULTILINE)
+                for match in matches:
+                    accounts.append(f"{match.group(1).strip()} -> {match.group(2).strip()}")
+                    
+                print("\nHow would you like to select your campaign?")
+                print("  1) Choose from the extracted menu")
+                print("  2) Select manually in the browser")
+                method_choice = input(">>> (1/2): ").strip()
+                
+                if method_choice == '1' and accounts:
+                    print("\n" + "=" * 50)
+                    print("             ADS MANAGER ACCOUNTS")
+                    print("=" * 50)
+                    for i, acc in enumerate(accounts):
+                        print(f"[{i+1}] {acc}")
+                    print("=" * 50)
+                    
+                    while True:
+                        acc_choice = input(f"\n>>> Select an account number (1-{len(accounts)}): ").strip()
+                        try:
+                            idx = int(acc_choice) - 1
+                            if 0 <= idx < len(accounts):
+                                chosen_acc = accounts[idx]
+                                chosen_id = chosen_acc.split("->")[1].strip()
+                                print(f"\nYou selected: {chosen_acc}")
+                                
+                                target_url = f"https://ads.tiktok.com/i18n/manage/campaign?aadvid={chosen_id}"
+                                print(f"Redirecting browser to: {target_url}")
+                                driver.get(target_url)
+                                time.sleep(3)
+                                break
+                            else:
+                                print("Invalid number. Try again.")
+                        except ValueError:
+                            print("Please enter a valid number.")
+                else:
+                    if method_choice == '1' and not accounts:
+                        print("No accounts found to display in menu. Switching to manual mode.")
+                    while True:
+                        done_manual = input("\n>>> Are you done manually going to the campaign page? (yes/no): ").strip().lower()
+                        if done_manual in ['yes', 'y']:
+                            break
+                        else:
+                            print("Waiting... Please manually click and navigate to the campaign page.")
+                            time.sleep(1)
+            except Exception as extract_err:
+                log_error(f"Failed to extract accounts: {extract_err}")
+
         # Ask if they want to start the campaign automation again
         start_again = input("\n>>> Start campaign adding again? (yes/no): ").strip().lower()
         
