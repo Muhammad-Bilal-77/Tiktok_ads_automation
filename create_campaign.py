@@ -1517,6 +1517,33 @@ def main():
 
         set_label(driver, "CREATE READY - Done!")
 
+        # ── Load video codes from CSV ─────────────────────────────────────────
+        import csv, os
+        default_csv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "video_codes.csv")
+        print(f"\n[VIDEO CODES] Default CSV path: {default_csv}")
+        csv_path_input = input(">>> CSV file path (press Enter to use default): ").strip()
+        csv_path = csv_path_input if csv_path_input else default_csv
+
+        post_id_input = input(">>> Enter the Post ID whose video codes you want to use: ").strip()
+
+        video_codes = []
+        try:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if str(row.get("id", "")).strip() == post_id_input:
+                        code = str(row.get("video_code", "")).strip()
+                        if code:
+                            video_codes.append(code)
+            if video_codes:
+                log_success(f"[VIDEO CODES] Loaded {len(video_codes)} code(s) for ID '{post_id_input}'.")
+            else:
+                log_error(f"[VIDEO CODES] No codes found for ID '{post_id_input}' in {csv_path}.")
+        except FileNotFoundError:
+            log_error(f"[VIDEO CODES] CSV file not found: {csv_path}")
+        except Exception as csv_err:
+            log_error(f"[VIDEO CODES] Error reading CSV: {csv_err}")
+
         # ── Scroll to Ad details → click "Add videos or images" ──────────────
         log_info("[AD CREATIVE] Waiting for Ad creation page to load...")
         time.sleep(3)
@@ -1666,6 +1693,97 @@ def main():
 
                 if not add_post_clicked:
                     log_error("[ADD POST] Could not click 'Add post' button.")
+                elif video_codes:
+                    # ── Type video codes into the dialog textarea ─────────────
+                    log_info("[VIDEO CODES] Waiting for 'Authorize TikTok posts' dialog...")
+                    time.sleep(2)
+                    codes_text = "\n".join(video_codes)
+                    typed_codes = False
+                    for _tc in range(6):
+                        try:
+                            # Find the dialog textarea specifically (NOT the ad-text textarea behind it)
+                            ta_el = None
+                            for sel in [
+                                'textarea[placeholder*="TikTok post code"]',
+                                'textarea[autofocus]',
+                                '[data-testid*="native-batch-authorize"] textarea',
+                                '.vi-dialog textarea',
+                            ]:
+                                try:
+                                    candidates = driver.find_elements(By.CSS_SELECTOR, sel)
+                                    for c in candidates:
+                                        placeholder = (c.get_attribute('placeholder') or '').lower()
+                                        if c.is_displayed() and 'post code' in placeholder:
+                                            ta_el = c
+                                            break
+                                    if ta_el:
+                                        break
+                                except Exception:
+                                    pass
+
+                            if ta_el:
+                                # JS focus to bypass click-interception, then real send_keys for Vue reactivity
+                                driver.execute_script('arguments[0].scrollIntoView({block:"center"});', ta_el)
+                                driver.execute_script('arguments[0].focus();', ta_el)
+                                time.sleep(0.3)
+                                ta_el.send_keys(Keys.CONTROL + 'a')
+                                ta_el.send_keys(Keys.DELETE)
+                                time.sleep(0.2)
+                                ta_el.send_keys(codes_text)
+                                time.sleep(0.5)
+                                log_success(f'[VIDEO CODES] Typed {len(video_codes)} code(s) into textarea (send_keys).')
+                                typed_codes = True
+                                break
+                            else:
+                                log_info(f'[VIDEO CODES] Textarea not found on attempt {_tc+1}, waiting...')
+                                time.sleep(0.8)
+                        except Exception as tc_err:
+                            log_error(f'[VIDEO CODES] Textarea error on attempt {_tc+1}: {tc_err}')
+                            time.sleep(0.8)
+
+
+                    if not typed_codes:
+                        log_error("[VIDEO CODES] Could not type codes into textarea.")
+                    else:
+                        # ── Click 'Continue' in the dialog ────────────────────
+                        log_info("[VIDEO CODES] Clicking 'Continue' in the dialog...")
+                        time.sleep(0.5)
+                        for _dc in range(5):
+                            try:
+                                dlg_cont = driver.execute_script("""
+                                    // Dialog footer Continue button
+                                    var footer = document.querySelector('.vi-dialog__footer, [role="dialog"]');
+                                    if (footer) {
+                                        var btns = footer.querySelectorAll('button');
+                                        for (var i = 0; i < btns.length; i++) {
+                                            var t = (btns[i].innerText || btns[i].textContent || '').trim();
+                                            if (t === 'Continue') {
+                                                btns[i].click();
+                                                return 'footer-btn';
+                                            }
+                                        }
+                                    }
+                                    // Fallback: any visible Continue button
+                                    var all = document.querySelectorAll('button');
+                                    for (var j = 0; j < all.length; j++) {
+                                        var t2 = (all[j].innerText || all[j].textContent || '').trim();
+                                        if (t2 === 'Continue') {
+                                            all[j].click();
+                                            return 'global-btn';
+                                        }
+                                    }
+                                    return false;
+                                """)
+                                if dlg_cont:
+                                    log_success(f"[VIDEO CODES] Clicked dialog Continue ({dlg_cont})!")
+                                    time.sleep(2)
+                                    break
+                                else:
+                                    log_info(f"[VIDEO CODES] Continue not found in dialog on attempt {_dc+1}...")
+                                    time.sleep(0.8)
+                            except Exception as dc_err:
+                                log_error(f"[VIDEO CODES] Dialog Continue error: {dc_err}")
+                                time.sleep(0.8)
 
         log_success("Step 2 complete!")
 
