@@ -1852,6 +1852,60 @@ def main():
                         if not d2_clicked:
                             log_error('[DIALOG2] Could not click Add TikTok posts after 8 attempts.')
 
+                        # -- Sidebar Confirm button (hybrid-drawer-footer-submit-button) --
+                        if d2_clicked:
+                            log_info('[CONFIRM] Waiting for sidebar Confirm button...')
+                            time.sleep(2)
+                            confirmed = False
+                            for _cf in range(6):
+                                try:
+                                    cf_el = None
+                                    # Strategy A: exact data-testid via Selenium
+                                    try:
+                                        for el in driver.find_elements(By.CSS_SELECTOR,
+                                                '[data-testid="hybrid-drawer-footer-submit-button"]'):
+                                            r = driver.execute_script(
+                                                'var r=arguments[0].getBoundingClientRect();'
+                                                'return r.width>0&&r.height>0;', el)
+                                            if r:
+                                                cf_el = el
+                                                break
+                                    except Exception:
+                                        pass
+
+                                    # Strategy B: XPath in footer-operation div
+                                    if not cf_el:
+                                        try:
+                                            xp = '//*[contains(@class,"footer-operation")]//button[normalize-space(.)="Confirm"]'
+                                            for el in driver.find_elements(By.XPATH, xp):
+                                                r = driver.execute_script(
+                                                    'var r=arguments[0].getBoundingClientRect();'
+                                                    'return r.width>0&&r.height>0;', el)
+                                                if r:
+                                                    cf_el = el
+                                                    break
+                                        except Exception:
+                                            pass
+
+                                    if cf_el:
+                                        driver.execute_script(
+                                            'arguments[0].scrollIntoView({block:"nearest"});', cf_el)
+                                        time.sleep(0.2)
+                                        driver.execute_script('arguments[0].click();', cf_el)
+                                        log_success('[CONFIRM] Clicked sidebar Confirm button!')
+                                        confirmed = True
+                                        time.sleep(2)
+                                        break
+                                    else:
+                                        log_info(f'[CONFIRM] Confirm not found attempt {_cf+1}...')
+                                        time.sleep(1)
+                                except Exception as cf_err:
+                                    log_error(f'[CONFIRM] Error attempt {_cf+1}: {cf_err}')
+                                    time.sleep(1)
+
+                            if not confirmed:
+                                log_error('[CONFIRM] Could not click sidebar Confirm after 6 attempts.')
+
         log_success("Step 2 complete!")
 
 
