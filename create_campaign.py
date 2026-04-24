@@ -1582,9 +1582,50 @@ def main():
             log_error("[AD CREATIVE] Could not find/click 'Add videos or images' button.")
         else:
             log_info("[AD CREATIVE] Right-side creative sidebar should now be open.")
-            time.sleep(1)
+            time.sleep(1.5)
+
+            # ── Click the "TikTok posts" tab in the sidebar ───────────────────
+            log_info("[TIKTOK POSTS] Clicking 'TikTok posts' tab...")
+            tiktok_tab_clicked = False
+            for _tt in range(5):
+                try:
+                    clicked = driver.execute_script("""
+                        // Primary: id="tab-tiktok_mixed_post"
+                        var tab = document.getElementById('tab-tiktok_mixed_post');
+                        if (tab) {
+                            tab.scrollIntoView({block: 'center'});
+                            tab.click();
+                            return 'id-match';
+                        }
+                        // Fallback: tab whose text is "TikTok posts"
+                        var tabs = document.querySelectorAll('[role="tab"], .vi-tabs__item, .vi-tab');
+                        for (var i = 0; i < tabs.length; i++) {
+                            var t = (tabs[i].innerText || tabs[i].textContent || '').trim().toLowerCase();
+                            if (t === 'tiktok posts') {
+                                tabs[i].scrollIntoView({block: 'center'});
+                                tabs[i].click();
+                                return 'text-match';
+                            }
+                        }
+                        return false;
+                    """)
+                    if clicked:
+                        log_success(f"[TIKTOK POSTS] Clicked TikTok posts tab ({clicked})!")
+                        tiktok_tab_clicked = True
+                        time.sleep(1.5)
+                        break
+                    else:
+                        log_info(f"[TIKTOK POSTS] Tab not found on attempt {_tt+1}, waiting...")
+                        time.sleep(0.8)
+                except Exception as tt_err:
+                    log_error(f"[TIKTOK POSTS] Error on attempt {_tt+1}: {tt_err}")
+                    time.sleep(0.8)
+
+            if not tiktok_tab_clicked:
+                log_error("[TIKTOK POSTS] Could not click TikTok posts tab.")
 
         log_success("Step 2 complete!")
+
 
 
 
