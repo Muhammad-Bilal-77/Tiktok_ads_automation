@@ -8,6 +8,7 @@ so Selenium doesn't wait for images/scripts — only the DOM.
 import shutil
 import os
 import json
+import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -165,6 +166,11 @@ def create_browser():
 
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     driver.implicitly_wait(IMPLICIT_WAIT)
+    
+    try:
+        driver.maximize_window()
+    except Exception:
+        pass
 
     log_info("Chrome is READY! (Remote debugging on port 9222)")
     return driver
@@ -190,20 +196,83 @@ def connect_browser():
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
     driver.implicitly_wait(IMPLICIT_WAIT)
 
-    # Make sure we are on the right tab! Remote debugging might attach to a background tab.
-    found_tiktok = False
-    for handle in driver.window_handles:
-        driver.switch_to.window(handle)
-        if "tiktok.com" in driver.current_url:
-            found_tiktok = True
-            break
-            
-    if not found_tiktok and len(driver.window_handles) > 0:
-        # Fallback to the last tab if we couldn't find one explicitly with tiktok in the URL
-        driver.switch_to.window(driver.window_handles[-1])
+    # Try to maximize and focus
+    try:
+        driver.maximize_window()
+        driver.execute_script("window.focus();")
+    except Exception:
+        pass
 
-    log_info(f"Connected! Current URL: {driver.current_url}")
-    log_info(f"Tabs open: {len(driver.window_handles)}")
+    # List all handles for debugging
+    log_info(f"Checking {len(driver.window_handles)} window handles...")
+    handles_info = []
+    
+    for handle in driver.window_handles:
+        try:
+            driver.switch_to.window(handle)
+            title = driver.title or ""
+            url = driver.current_url or ""
+            size = driver.get_window_size()
+            
+            # Score the window based on how "real" it looks
+            score = 0
+            if "tiktok.com" in url.lower(): score += 100
+            if title and "New Tab" not in title: score += 50
+            if size['width'] > 500: score += 20
+            if size['height'] > 400: score += 20
+            
+            handles_info.append({
+                'handle': handle,
+                'title': title,
+                'url': url,
+                'size': size,
+                'score': score
+            })
+            log_info(f"  - Window: '{title[:30]}' | URL: {url[:40]}... | Score: {score}")
+        except Exception as e:
+            continue
+            
+    # Sort by score descending
+    handles_info.sort(key=lambda x: x['score'], reverse=True)
+    
+    if handles_info and handles_info[0]['score'] > 0:
+        target = handles_info[0]
+        driver.switch_to.window(target['handle'])
+        log_info(f"Targeting best window: '{target['title']}' (Score: {target['score']})")
+        found_tiktok = "tiktok.com" in target['url'].lower()
+    else:
+        found_tiktok = False
+
+    if not found_tiktok:
+        log_info("No suitable TikTok window found. Opening a FRESH window...")
+        try:
+            # Force a completely new top-level window
+            driver.execute_script("window.open('https://ads.tiktok.com/i18n/login?lang=en', '_blank', 'width=1400,height=1000,menubar=yes,location=yes,resizable=yes,scrollbars=yes');")
+            time.sleep(2)
+            # Find the new handle
+            for handle in driver.window_handles:
+                driver.switch_to.window(handle)
+                if "tiktok.com" in driver.current_url.lower():
+                    break
+        except Exception as e:
+            log_warning(f"Could not open new window: {e}")
+            if len(driver.window_handles) > 0:
+                driver.switch_to.window(driver.window_handles[-1])
+
+    # Final attempt to focus and maximize
+    try:
+        driver.maximize_window()
+        # Bring to front
+        driver.execute_script("window.focus();")
+        # Click on body to force focus (sometimes works)
+        try:
+            driver.find_element(By.TAG_NAME, "body").click()
+        except:
+            pass
+    except Exception:
+        pass
+
+    log_info(f"Connected! Final URL: {driver.current_url}")
     return driver
 
 

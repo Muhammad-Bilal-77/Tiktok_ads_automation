@@ -139,15 +139,54 @@ def fast_navigate(driver, url, description="page", max_retries=3):
         spinner = LoadingSpinner(f"Loading {description} (attempt {attempt}/{max_retries})")
         spinner.start()
         try:
+            # Ensure we are focused
+            try:
+                driver.maximize_window()
+                driver.execute_script("window.focus();")
+            except Exception:
+                pass
+
             dismiss_dialogs(driver)
-            driver.get(url)
+            
+            # Skip navigation if we are ALREADY on the target URL and it's not a blank page
+            current_url = driver.current_url
+            if url.lower() in current_url.lower() and "blank" not in current_url and "newtab" not in current_url:
+                log_info(f"Already on {description}, skipping navigation.")
+            else:
+                # Force navigation
+                try:
+                    driver.get(url)
+                except Exception as nav_err:
+                    log_warning(f"Standard navigation issue: {nav_err}. Trying JS fallback...")
+                    try:
+                        driver.execute_script(f"window.location.href = '{url}';")
+                    except Exception:
+                        pass
+
             dismiss_dialogs(driver)
-            current = driver.current_url
+            
+            # Wait for URL to stabilize
+            for _ in range(5):
+                time.sleep(1)
+                current = driver.current_url
+                if current and "blank" not in current and "newtab" not in current:
+                    break
+            
+            # Stricter check: must not be blank/newtab, and if it's a tiktok URL, it should contain tiktok
             if current and "blank" not in current and "newtab" not in current:
+                # If we expect TikTok, we must be on TikTok
+                if "tiktok.com" in url.lower() and "tiktok.com" not in current.lower():
+                    # Allow for redirects to login or home if we are on tiktok domain
+                    if "tiktok.com" in current.lower():
+                        pass 
+                    else:
+                        spinner.stop(f"Unexpected site: {current}")
+                        continue
+                
                 spinner.stop(f"{description} loaded!")
                 inject_cursor(driver)
                 return True
-            spinner.stop("Blank page, retrying...")
+            spinner.stop("Page stayed blank, retrying...")
         except TimeoutException:
             spinner.stop(f"Timeout, retrying...")
             try:
@@ -155,6 +194,15 @@ def fast_navigate(driver, url, description="page", max_retries=3):
             except Exception:
                 pass
         except WebDriverException as e:
+            err_msg = str(e).lower()
+            if "no such window" in err_msg or "target window already closed" in err_msg:
+                spinner.stop("Window lost, attempting to recover...")
+                try:
+                    if len(driver.window_handles) > 0:
+                        driver.switch_to.window(driver.window_handles[-1])
+                        continue
+                except Exception:
+                    pass
             spinner.stop(f"Error: {str(e)[:50]}")
     log_error(f"Failed to load {description}.")
     return False
@@ -189,8 +237,17 @@ def extract_aadvid(url):
 # ─────────────────────────────────────────────────────────────
 
 def wait_for_login(driver):
+    try:
+        driver.execute_script("document.title = '>>> ACTION REQUIRED: LOG IN NOW <<<';")
+        inject_cursor(driver)
+        update_cursor_label(driver, "WAITING FOR USER LOGIN...")
+    except Exception:
+        pass
+        
     print("\n" + "=" * 50)
     print("  LOGIN: Log in to TikTok in the browser,")
+    print(f"  Current Window: {driver.title}")
+    print(f"  Current URL: {driver.current_url}")
     print("  then type 'yes' here.")
     print("=" * 50 + "\n")
     while True:
