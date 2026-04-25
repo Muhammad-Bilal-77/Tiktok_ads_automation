@@ -1977,22 +1977,8 @@ def main():
             log_warning("[OPTIMIZATION] Could not find Optimization event dropdown.")
         time.sleep(2)
 
-        # ── Wait for user to confirm Pixel setup, then click Continue ─────────
-        log_info("[PIXEL] Checking if Pixel setup is complete...")
-        pixel_ready = False
-        while not pixel_ready:
-            try:
-                answer = input("\n>>> Is your Pixel setup done? (yes/no): ").strip().lower()
-            except EOFError:
-                answer = "yes"   # non-interactive fallback
-
-            if answer in ("yes", "y"):
-                pixel_ready = True
-            else:
-                log_info("[PIXEL] Waiting 30 seconds, then asking again...")
-                time.sleep(30)
-
-        log_info("[PIXEL] Pixel setup confirmed. Clicking 'Continue'...")
+        # ── Auto-click Continue ──────────────────────────────────────────────
+        log_info("[PIXEL] Automatically clicking 'Continue'...")
         continue_clicked = False
         for _c in range(5):
             try:
