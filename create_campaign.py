@@ -15,6 +15,7 @@ Usage:
 import re
 import time
 import json
+import random
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -345,6 +346,48 @@ JS_FIND_WEBSITE_RADIO = """
     };
 """
 
+
+JS_FIND_MANUAL_CAMPAIGN = """
+    // Finds the "Manual campaign" radio button (usually under Website destination).
+    function findManualCampaignLabel() {
+        // P1: Specific class/testid wrapper from provided HTML
+        var wrapper = document.querySelector('.campaignType-1 label');
+        if (wrapper && wrapper.getBoundingClientRect().width > 0) return wrapper;
+        
+        // P2: Text search across all radio labels
+        var labels = document.querySelectorAll('label[role="radio"]');
+        for (var i = 0; i < labels.length; i++) {
+            if (labels[i].textContent.includes('Manual campaign')) {
+                var r = labels[i].getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) return labels[i];
+            }
+        }
+        return null;
+    }
+    
+    var label = findManualCampaignLabel();
+    if (!label) return null;
+    
+    // Check if already selected
+    if (label.getAttribute('aria-checked') === 'true' || label.classList.contains('is-checked')) {
+        return {el: label, status: 'already_set'};
+    }
+    
+    // Attempt JS click on inner visual dot for React/Vue binding
+    var innerDot = label.querySelector('span.vi-radio__inner');
+    if (innerDot) { innerDot.click(); } else { label.click(); }
+    
+    // Return coordinates for ActionChains fallback click
+    var clickEl = innerDot || label;
+    clickEl.scrollIntoView({block: 'center'});
+    var cr = clickEl.getBoundingClientRect();
+    return {
+        el: clickEl,
+        status: 'needs_click',
+        x: Math.round(cr.x + cr.width / 2),
+        y: Math.round(cr.y + cr.height / 2)
+    };
+"""
 
 JS_FIND_SET_BUDGET = """
     // Finds the "Set campaign budget" toggle (vi-switch).
@@ -880,6 +923,69 @@ def main():
 
         time.sleep(1)
 
+        # ── Handle Experimental UI Popup & Switch Back ────────────────────────
+        log_info("[UI] Checking for experimental UI popup...")
+        try:
+            # 1. Click "Got it" if the popup is present
+            got_it_clicked = driver.execute_script("""
+                var gotIt = document.querySelector('[data-testid="ks-button-index-onaHQE"]') || 
+                            Array.from(document.querySelectorAll('ks-button-zwfuu3tc')).find(el => el.textContent.includes('Got it'));
+                if (gotIt) {
+                    gotIt.click();
+                    return true;
+                }
+                return false;
+            """)
+            if got_it_clicked:
+                log_success("[UI] Clicked 'Got it' in experimental UI popup.")
+                time.sleep(1.5)
+            
+            # 2. Check for "Switch back to previous version" button
+            switch_back_clicked = driver.execute_script("""
+                var switchBack = document.querySelector('[data-testid="switch-back-button"]') ||
+                                 Array.from(document.querySelectorAll('ks-button-zwfuu3tc')).find(el => el.textContent.includes('Switch back to previous version'));
+                if (switchBack) {
+                    switchBack.scrollIntoView({block: 'center'});
+                    switchBack.click();
+                    return true;
+                }
+                return false;
+            """)
+            
+            if switch_back_clicked:
+                log_success("[UI] Clicked 'Switch back to previous version'.")
+                time.sleep(3) # Wait for page to reload/switch
+                
+                # Check for a confirmation dialog after clicking switch back
+                interact_with_element_by_js(driver, JS_FIND_CONFIRM_BUTTON, "Confirm button (Switch back)", retries=5, must_succeed=False)
+                time.sleep(5) # Extra wait for UI to stabilize
+                
+                # Re-inject cursor
+                inject_cursor(driver)
+                
+                # Re-select Sales, Website, and Manual Campaign to ensure flow continues correctly
+                log_info("[UI] Re-verifying Sales, Website, and Manual selection after switch...")
+                set_label(driver, "UI RE-VERIFICATION: Sales/Website/Manual")
+                
+                # 1. Re-select Sales
+                interact_with_element_by_js(driver, JS_FIND_SALES, "Sales Objective (Re-verify)", retries=10, must_succeed=False)
+                time.sleep(1.5)
+                
+                # 2. Re-select Website
+                interact_with_element_by_js(driver, JS_FIND_WEBSITE_RADIO, "Website Radio (Re-verify)", retries=10, must_succeed=False)
+                time.sleep(1.5)
+                
+                # 3. Select Manual Campaign (Ensure we are not in Smart+ mode)
+                interact_with_element_by_js(driver, JS_FIND_MANUAL_CAMPAIGN, "Manual Campaign (Re-verify)", retries=10, must_succeed=False)
+                time.sleep(2)
+                log_success(f"[UI] UI reverted and campaign settings re-applied. URL: {driver.current_url}")
+            else:
+                log_info("[UI] 'Switch back' button not found, assuming stable UI.")
+        except Exception as ui_err:
+            log_error(f"[UI] Error handling UI switch: {ui_err}")
+
+        time.sleep(1)
+
         # ── STEP 10: Click 'Set campaign budget' toggle ─────────────────
         log_step(10, "Scrolling to 'Set campaign budget' toggle and turning it ON...")
         set_label(driver, "STEP 10: Enabling Set campaign budget...")
@@ -901,6 +1007,7 @@ def main():
                     for (var i = 0; i < switches.length; i++) {
                         var region = switches[i].closest('div.switch-container') ||
                                      switches[i].closest('div') ||
+                                     switches[i].closest('section') ||
                                      switches[i].parentElement;
                         if (region && region.textContent.includes('Set campaign budget')) {
                             sw = switches[i];
@@ -911,17 +1018,16 @@ def main():
 
                 if (!sw) return {found: false};
 
-                // Scroll the switch into view INSTANTLY (not smooth — smooth is async,
-                // getBoundingClientRect would read pre-scroll coordinates)
+                // Scroll the switch into view INSTANTLY
                 sw.scrollIntoView({block: 'center', behavior: 'instant'});
 
-                // Determine ON/OFF: vi-switch uses is-checked class or input.checked
+                // Determine ON/OFF
                 var inp = sw.querySelector('input[type="checkbox"]');
                 var isOn = sw.classList.contains('is-checked') ||
                            (inp != null && inp.checked) ||
                            sw.getAttribute('data-tea-campaign_budget_status') === 'true';
 
-                // Return the coordinates of the core pill for ActionChains click
+                // Return the coordinates
                 var core = sw.querySelector('span.vi-switch__core') || sw;
                 var r = core.getBoundingClientRect();
                 return {
@@ -933,8 +1039,17 @@ def main():
             """)
 
             if not info or not info.get("found"):
-                log_info(f"[BUDGET] Switch not found in DOM (attempt {_attempt+1}), retrying in 2s...")
-                time.sleep(2)
+                log_info(f"[BUDGET] Switch not found (attempt {_attempt+1}). Checking for 'Manual campaign' selection...")
+                # Fallback: Check if we are in Smart+ mode and need to switch to Manual to expose the budget toggle
+                manual_switched = interact_with_element_by_js(driver, JS_FIND_MANUAL_CAMPAIGN, "Manual Campaign (Budget Fallback)", retries=3, must_succeed=False)
+                if manual_switched:
+                    log_success("[BUDGET] Switched to 'Manual campaign' mode. Waiting for UI update...")
+                    time.sleep(3)
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(1.5)
+                else:
+                    log_info(f"[BUDGET] 'Manual campaign' already selected or not found. Retrying in 2s...")
+                    time.sleep(2)
                 continue
 
             if info.get("on"):
@@ -2676,87 +2791,93 @@ def main():
                             log_error(f"[DESTINATION] Error setting URL: {dest_err}")
                         time.sleep(1)
 
-                        # ── Click 'Publish all' button (Shadow DOM: ks-button-91g) ──────
-                        log_info('[PUBLISH] Clicking Publish all button...')
+                        # -- Post-URL actions: Scroll and click left area to dismiss focus --
+                        log_info("[DESTINATION] Scrolling and clicking left area to dismiss...")
+                        try:
+                            driver.execute_script("window.scrollBy(0, 150);")
+                            time.sleep(0.5)
+                            # Move to left blank area and click twice
+                            ActionChains(driver) \
+                                .move_to_location(100, 500) \
+                                .click() \
+                                .pause(0.2) \
+                                .click() \
+                                .perform()
+                            log_success("[DESTINATION] Dismiss actions complete.")
+                        except Exception as post_url_err:
+                            log_error(f"[DESTINATION] Post-URL actions error: {post_url_err}")
+                        time.sleep(1)
+
+                        # ── Click 'Publish all' button (Double-Click Strategy) ──────
+                        log_info('[PUBLISH] Starting double-publish sequence...')
                         time.sleep(1.5)
                         published = False
-                        for _pub in range(6):
-                            try:
-                                pub_result = driver.execute_script("""
-                                    // Strategy 1: Pierce shadow DOM of ks-tooltip-91g[title='Publish all']
-                                    var tooltips = document.querySelectorAll('ks-tooltip-91g');
-                                    for (var i = 0; i < tooltips.length; i++) {
-                                        var tt = tooltips[i];
-                                        if ((tt.getAttribute('title') || '').toLowerCase().indexOf('publish') !== -1) {
-                                            // Try clicking the custom element directly first
-                                            var r = tt.getBoundingClientRect();
-                                            if (r.width > 0) {
-                                                // Pierce into shadow root
-                                                var sr = tt.shadowRoot;
-                                                if (sr) {
-                                                    var btn = sr.querySelector('ks-button-91g[data-testid="common_next_button"]')
-                                                           || sr.querySelector('ks-button-91g')
-                                                           || sr.querySelector('[data-testid="common_next_button"]');
-                                                    if (btn) { btn.click(); return 'shadow-ks-btn'; }
-                                                }
-                                                tt.click();
-                                                return 'tooltip-click';
+                        
+                        def try_click_publish():
+                            return driver.execute_script("""
+                                // Combined Publish detection logic
+                                var tooltips = document.querySelectorAll('ks-tooltip-91g');
+                                for (var i = 0; i < tooltips.length; i++) {
+                                    var tt = tooltips[i];
+                                    if ((tt.getAttribute('title') || '').toLowerCase().indexOf('publish') !== -1) {
+                                        var r = tt.getBoundingClientRect();
+                                        if (r.width > 0) {
+                                            var sr = tt.shadowRoot;
+                                            if (sr) {
+                                                var btn = sr.querySelector('ks-button-91g[data-testid="common_next_button"]') 
+                                                       || sr.querySelector('ks-button-91g')
+                                                       || sr.querySelector('[data-testid="common_next_button"]');
+                                                if (btn) { btn.click(); return 'shadow-ks-btn'; }
                                             }
+                                            tt.click();
+                                            return 'tooltip-click';
                                         }
                                     }
-                                    // Strategy 2: data-testid="common_next_button" direct
-                                    var btn2 = document.querySelector('[data-testid="common_next_button"]');
-                                    if (btn2) { btn2.click(); return 'testid-direct'; }
-                                    // Strategy 3: any ks-button-91g visible
-                                    var ksBtns = document.querySelectorAll('ks-button-91g');
-                                    for (var j = 0; j < ksBtns.length; j++) {
-                                        var rb = ksBtns[j].getBoundingClientRect();
-                                        if (rb.width > 0 && rb.height > 0) {
-                                            ksBtns[j].click();
-                                            return 'ks-btn-' + j;
-                                        }
-                                    }
-                                    // Strategy 4: XPath text 'Publish all'
-                                    return null;
-                                """)
+                                }
+                                var btn2 = document.querySelector('[data-testid="common_next_button"]');
+                                if (btn2) { btn2.click(); return 'testid-direct'; }
+                                return null;
+                            """)
 
-                                if pub_result:
-                                    log_success(f'[PUBLISH] Clicked Publish all ({pub_result})!')
-                                    published = True
-                                    time.sleep(2)
-                                    break
-                                else:
-                                    # XPath fallback via Selenium
-                                    try:
-                                        for xp_pub in [
-                                            '//button[normalize-space(.)="Publish all"]',
-                                            '//*[contains(@title,"Publish all")]',
-                                            '//*[normalize-space(.)="Publish all"]',
-                                        ]:
-                                            els = driver.find_elements(By.XPATH, xp_pub)
-                                            for el in els:
-                                                r = driver.execute_script(
-                                                    'var r=arguments[0].getBoundingClientRect();'
-                                                    'return r.width>0&&r.height>0;', el)
-                                                if r:
-                                                    driver.execute_script('arguments[0].click();', el)
-                                                    log_success('[PUBLISH] Clicked Publish all (XPath)!')
-                                                    published = True
-                                                    break
-                                            if published:
-                                                break
-                                    except Exception:
-                                        pass
-
-                                if published:
-                                    time.sleep(2)
-                                    break
-                                else:
-                                    log_info(f'[PUBLISH] Publish all not found attempt {_pub+1}...')
+                        # Loop attempt for the whole sequence
+                        for _pub_attempt in range(3):
+                            # 1. First Publish Click
+                            pub_result1 = try_click_publish()
+                            if pub_result1:
+                                log_success(f'[PUBLISH] First click successful ({pub_result1}).')
+                                time.sleep(2)
+                                
+                                # 2. Random Dance (Scroll up + Random Clicks)
+                                log_info("[PUBLISH] Performing random dance (scroll up + random clicks)...")
+                                try:
+                                    driver.execute_script("window.scrollBy(0, -250);")
                                     time.sleep(1)
-                            except Exception as pub_err:
-                                log_error(f'[PUBLISH] Error attempt {_pub+1}: {pub_err}')
+                                    for _d in range(3):
+                                        # Click randomly on the left side (x: 50-200, y: 200-600)
+                                        rx = random.randint(50, 200)
+                                        ry = random.randint(200, 600)
+                                        ActionChains(driver).move_to_location(rx, ry).click().perform()
+                                        time.sleep(0.3)
+                                    log_success("[PUBLISH] Random dance complete.")
+                                except Exception as d_err:
+                                    log_error(f"[PUBLISH] Dance error: {d_err}")
+                                
                                 time.sleep(1)
+                                
+                                # 3. Second Publish Click
+                                pub_result2 = try_click_publish()
+                                if pub_result2:
+                                    log_success(f'[PUBLISH] Second click successful ({pub_result2}). Campaign should be publishing!')
+                                    published = True
+                                    break
+                                else:
+                                    log_warning("[PUBLISH] Second click failed to find button.")
+                            else:
+                                log_info(f'[PUBLISH] Publish button not found attempt {_pub_attempt+1}...')
+                                time.sleep(2)
+
+                        if not published:
+                            log_error('[PUBLISH] Could not complete double-publish after multiple attempts.')
 
                         if not published:
                             log_error('[PUBLISH] Could not click Publish all after 6 attempts.')
