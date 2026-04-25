@@ -2856,7 +2856,7 @@ def main():
                                         # Click randomly on the left side (x: 50-200, y: 200-600)
                                         rx = random.randint(50, 200)
                                         ry = random.randint(200, 600)
-                                        ActionChains(driver).move_to_location(rx, ry).click().perform()
+                                        click_at(driver, rx, ry, f"Clearing UI focus (click {_d+1})")
                                         time.sleep(0.3)
                                     log_success("[PUBLISH] Random dance complete.")
                                 except Exception as d_err:
