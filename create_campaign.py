@@ -1931,6 +1931,52 @@ def main():
         log_success("[PLACEMENTS] All Advanced Settings switches toggled off.")
         time.sleep(2)
 
+        # ── Configure Optimization: Set event to 'Purchase' ──────────────────
+        log_info("[OPTIMIZATION] Setting optimization event to 'Purchase'...")
+        # Scroll up to the Promotion/Optimization section (above Placements)
+        driver.execute_script("""
+            var promo = document.getElementById('promotion') || 
+                         document.querySelector('[data-tea-std_module_name="promotion"]');
+            if (promo) {
+                promo.scrollIntoView({block: 'center', behavior: 'smooth'});
+            } else {
+                window.scrollBy(0, -800);
+            }
+        """)
+        time.sleep(2)
+
+        # Click the dropdown and select 'Purchase'
+        optimization_set = driver.execute_script("""
+            function selectPurchase() {
+                // 1. Find the Optimization event dropdown
+                var dropdown = document.querySelector('[placeholder="Select optimization event"]') ||
+                               document.querySelector('.pixel-event-list-select-new') ||
+                               document.querySelector('input[placeholder*="optimization event"]');
+                if (!dropdown) return false;
+                
+                dropdown.scrollIntoView({block: 'center'});
+                dropdown.click();
+                return true;
+            }
+            return selectPurchase();
+        """)
+        
+        if optimization_set:
+            time.sleep(1.5)
+            # Click the 'Purchase' option
+            driver.execute_script("""
+                var options = Array.from(document.querySelectorAll('.vi-select-dropdown__item, .common-select__option'));
+                var purchase = options.find(opt => opt.textContent.trim().toLowerCase().includes('purchase'));
+                if (purchase) {
+                    purchase.scrollIntoView({block: 'center'});
+                    purchase.click();
+                }
+            """)
+            log_success("[OPTIMIZATION] Optimization event set to 'Purchase'.")
+        else:
+            log_warning("[OPTIMIZATION] Could not find Optimization event dropdown.")
+        time.sleep(2)
+
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
         log_info("[PIXEL] Checking if Pixel setup is complete...")
         pixel_ready = False
