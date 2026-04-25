@@ -1613,6 +1613,75 @@ def main():
         else:
             log_error("[START TIME] Could not find or click calendar icon.")
 
+        # ── Expand Demographics section in Targeting ──────────────────────────
+        log_info("[DEMOGRAPHICS] Expanding Demographics section...")
+        # Scroll up to the Targeting section (it's above Budget & Schedule)
+        driver.execute_script("""
+            var targeting = document.getElementById('targeting') || 
+                            document.querySelector('[data-tea-std_module_name="targeting"]');
+            if (targeting) {
+                targeting.scrollIntoView({block: 'center', behavior: 'smooth'});
+            } else {
+                window.scrollBy(0, -1000);
+            }
+        """)
+        time.sleep(2)
+
+        demographics_expanded = False
+        for _de in range(6):
+            try:
+                # Find Demographics chevron and click it
+                result = driver.execute_script("""
+                    function findDemographicsChevron() {
+                        var all = document.querySelectorAll('*');
+                        for (var el of all) {
+                            if (el.textContent.trim() === 'Demographics' && el.children.length === 0) {
+                                // Found the text, now find the chevron in its container
+                                var container = el.closest('.lego-titleContentWrap__bx5XxK') || el.parentElement;
+                                if (container) {
+                                    var chevron = container.querySelector('[data-testid="lego-get-chevron"]') ||
+                                                  container.querySelector('.lego-chevron__z4Djbb');
+                                    if (chevron) return chevron;
+                                }
+                            }
+                        }
+                        return null;
+                    }
+                    var chevron = findDemographicsChevron();
+                    if (chevron) {
+                        var panel = chevron.closest('[data-testid="lego-collapse"]') || 
+                                    chevron.closest('[class*="lego-content-slot-panel"]');
+                        if (panel && (panel.getAttribute('data-lego-collapse-aria-expanded') === 'true' || 
+                                     panel.getAttribute('aria-expanded') === 'true')) {
+                            return {status: 'already_expanded'};
+                        }
+                        chevron.scrollIntoView({block: 'center'});
+                        chevron.click();
+                        return {status: 'clicked'};
+                    }
+                    return {status: 'not_found'};
+                """)
+                
+                if result and result.get("status") == "clicked":
+                    log_success("[DEMOGRAPHICS] Expanded Demographics dropdown!")
+                    demographics_expanded = True
+                    time.sleep(1.5)
+                    break
+                elif result and result.get("status") == "already_expanded":
+                    log_success("[DEMOGRAPHICS] Demographics section is already expanded.")
+                    demographics_expanded = True
+                    break
+                else:
+                    log_info(f"[DEMOGRAPHICS] Dropdown not found on attempt {_de+1}, scrolling up more...")
+                    driver.execute_script("window.scrollBy(0, -250);")
+                    time.sleep(1.2)
+            except Exception as de_err:
+                log_error(f"[DEMOGRAPHICS] Error on attempt {_de+1}: {de_err}")
+                time.sleep(1)
+
+        if not demographics_expanded:
+            log_warning("[DEMOGRAPHICS] Could not expand Demographics section automatically.")
+
 
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
         log_info("[PIXEL] Checking if Pixel setup is complete...")
