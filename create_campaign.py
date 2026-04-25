@@ -1858,6 +1858,78 @@ def main():
             if not location_added:
                 log_warning("[LOCATION] Failed to add 'Punjab' automatically.")
 
+        # ── Configure Placements: Disable Advanced Settings switches ──────────
+        log_info("[PLACEMENTS] Configuring Advanced Settings...")
+        # Scroll up to the Placements section (above Targeting)
+        driver.execute_script("""
+            var placement = document.getElementById('placement') || 
+                            document.querySelector('[data-tea-std_module_name="placement"]');
+            if (placement) {
+                placement.scrollIntoView({block: 'center', behavior: 'smooth'});
+            } else {
+                window.scrollBy(0, -1200);
+            }
+        """)
+        time.sleep(2)
+
+        # 1. Expand Advanced settings
+        driver.execute_script("""
+            var advancedHead = document.querySelector('[data-testid="show-more-options-index-fn7Q62"]') ||
+                               document.querySelector('.show-more-options-head') ||
+                               Array.from(document.querySelectorAll('span')).find(el => el.textContent.includes('Advanced settings'));
+            
+            if (advancedHead) {
+                var container = document.querySelector('.show-more-options-container');
+                if (!container || container.style.display === 'none' || container.offsetHeight === 0) {
+                    advancedHead.click();
+                }
+            }
+        """)
+        time.sleep(2)
+
+        # 2. Toggle switches and handle popups one by one
+        active_switch_count = driver.execute_script("""
+            var placementSection = document.getElementById('placement') || document.body;
+            return placementSection.querySelectorAll('.vi-switch.is-checked').length;
+        """)
+        
+        log_info(f"[PLACEMENTS] Found {active_switch_count} active switches to disable.")
+        
+        for i in range(active_switch_count):
+            # Click the next available active switch
+            driver.execute_script("""
+                var placementSection = document.getElementById('placement') || document.body;
+                var sw = placementSection.querySelector('.vi-switch.is-checked');
+                if (sw) {
+                    sw.scrollIntoView({block: 'center'});
+                    sw.click();
+                }
+            """)
+            time.sleep(1.5) # wait for popup
+
+            # Handle confirmation popup if it exists
+            popup_handled = driver.execute_script("""
+                var buttons = Array.from(document.querySelectorAll('button, span, .vi-button'));
+                var turnOffBtn = buttons.find(b => {
+                    var t = b.textContent.trim().toLowerCase();
+                    return t === 'turn off' || t === 'confirm';
+                });
+                
+                if (turnOffBtn && turnOffBtn.offsetHeight > 0) {
+                    turnOffBtn.click();
+                    return true;
+                }
+                return false;
+            """)
+            
+            if popup_handled:
+                log_info(f"[PLACEMENTS] Confirmed 'Turn off' for switch {i+1}.")
+                time.sleep(1.5) # wait for popup to close
+            else:
+                log_info(f"[PLACEMENTS] Switch {i+1} disabled (no popup).")
+
+        log_success("[PLACEMENTS] All Advanced Settings switches toggled off.")
+        time.sleep(2)
 
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
         log_info("[PIXEL] Checking if Pixel setup is complete...")
