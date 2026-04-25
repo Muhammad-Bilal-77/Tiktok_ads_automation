@@ -574,9 +574,12 @@ def open_ads_manager():
                             
                             target_url = f"https://ads.tiktok.com/i18n/manage/campaign?aadvid={chosen_id}"
                             print(f"Redirecting browser to: {target_url}")
-                            driver.get(target_url)
-                            time.sleep(3)
-                            break
+                            if fast_navigate(driver, target_url, "Campaigns page"):
+                                break
+                            else:
+                                print("Failed to redirect. Trying manual selection.")
+                                method_choice = '2'
+                                break
                         else:
                             print("Invalid number. Try again.")
                     except ValueError:

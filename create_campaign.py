@@ -687,7 +687,15 @@ def main():
             if aadvid:
                 create_url = f"https://ads.tiktok.com/i18n/nb_creation/create/objectives?aadvid={aadvid}&enter_from=campaign_list"
                 log_info(f"Navigating directly via URL: {create_url}")
-                driver.get(create_url)
+                for attempt in range(1, 4):
+                    try:
+                        log_info(f"  Attempt {attempt}/3...")
+                        driver.get(create_url)
+                        break
+                    except Exception as e:
+                        log_warning(f"  Timeout/Error: {e}. Retrying...")
+                        try: driver.execute_script("window.stop();")
+                        except: pass
                 time.sleep(3)
                 log_success(f"Reached creation URL: {driver.current_url}")
             else:
@@ -719,7 +727,15 @@ def main():
                     f"&newbie_enable_back=1&creation_type=create_new"
                 )
                 log_info(f"Navigating to: {full_version_url}")
-                driver.get(full_version_url)
+                for attempt in range(1, 4):
+                    try:
+                        log_info(f"  Attempt {attempt}/3...")
+                        driver.get(full_version_url)
+                        break
+                    except Exception as e:
+                        log_warning(f"  Timeout/Error: {e}. Retrying...")
+                        try: driver.execute_script("window.stop();")
+                        except: pass
                 # Poll until the campaign creation page has loaded (up to 15 s)
                 for _ in range(15):
                     time.sleep(1)

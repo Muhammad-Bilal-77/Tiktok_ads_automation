@@ -11,7 +11,7 @@ TIKTOK_HOME_URL = "https://ads.tiktok.com/i18n/home?lang=en"
 TIKTOK_CAMPAIGN_URL_TEMPLATE = "https://ads.tiktok.com/i18n/manage/campaign?aadvid={aadvid}&lang=en"
 
 # ── Timeouts (seconds) ──────────────────────────────────────
-PAGE_LOAD_TIMEOUT = 15
+PAGE_LOAD_TIMEOUT = 60
 IMPLICIT_WAIT = 3
 EXPLICIT_WAIT = 10
 

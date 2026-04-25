@@ -96,9 +96,26 @@ def main():
                 target_url = f"https://ads.tiktok.com/i18n/manage/campaign?aadvid={chosen_id}"
                 
                 print(f"Redirecting browser to: {target_url}")
-                driver.get(target_url)
                 
-                print("\nSuccessfully redirected! You can now run `python create_campaign.py` to start adding a campaign here.")
+                # Robust navigation with retries
+                success = False
+                for attempt in range(1, 4):
+                    try:
+                        print(f"  Attempt {attempt}/3...")
+                        driver.get(target_url)
+                        success = True
+                        break
+                    except Exception as e:
+                        print(f"  Timeout/Error: {e}. Retrying...")
+                        try:
+                            driver.execute_script("window.stop();")
+                        except:
+                            pass
+                
+                if success:
+                    print("\nSuccessfully redirected! You can now run `python create_campaign.py` to start adding a campaign here.")
+                else:
+                    print("\nFailed to redirect automatically. Please navigate manually in the browser.")
                 break
             else:
                 print("Invalid number. Try again.")
