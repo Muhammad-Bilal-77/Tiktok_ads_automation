@@ -1759,6 +1759,105 @@ def main():
             if not location_removed:
                 log_warning("[LOCATION] Could not remove 'United States' tag automatically.")
 
+        # ── Add 'Punjab' to Location ──────────────────────────────
+        if demographics_expanded:
+            log_info("[LOCATION] Searching and adding 'Punjab'...")
+            location_added = False
+            for _la in range(6):
+                try:
+                    # Activate the select box and focus it
+                    driver.execute_script("""
+                        var selectBox = document.querySelector('[data-testid="lego-antd-select"]') || 
+                                        document.querySelector('.lego-select__fShXQQ');
+                        if (selectBox) {
+                            selectBox.scrollIntoView({block: 'center'});
+                            selectBox.click();
+                        }
+                    """)
+                    time.sleep(1.5)
+
+                    # Type 'Punjab' using ActionChains to ensure UI events are triggered
+                    # First, try to find the input to focus it, or just send keys if active
+                    input_found = driver.execute_script("""
+                        var inp = document.querySelector('.lego-select-inner__VewRMT input') ||
+                                  document.querySelector('.lego-select__fShXQQ input') ||
+                                  document.querySelector('input[placeholder*="search"]') ||
+                                  document.querySelector('input[placeholder*="Search"]') ||
+                                  document.activeElement;
+                        if (inp && inp.tagName === 'INPUT') {
+                            inp.focus();
+                            return true;
+                        }
+                        return false;
+                    """)
+                    
+                    actions = ActionChains(driver)
+                    actions.send_keys("Punjab")
+                    time.sleep(1)
+                    actions.send_keys(Keys.ENTER) # Try selecting first result via Enter
+                    actions.perform()
+                    log_info("[LOCATION] Typed 'Punjab' and pressed ENTER.")
+                    
+                    time.sleep(3) # Wait for dropdown/selection to process
+
+                    # If ENTER didn't work, try clicking the first result manually
+                    clicked = driver.execute_script("""
+                        // 1. Try common result classes
+                        var resultSelectors = [
+                            '.lego-select-dropdown__item',
+                            '[role="option"]',
+                            '.vi-select-item',
+                            '.lego-option',
+                            '.ant-select-item-option',
+                            '[class*="item"]',
+                            '[class*="option"]'
+                        ];
+                        
+                        for (var selector of resultSelectors) {
+                            var items = document.querySelectorAll(selector);
+                            for (var item of items) {
+                                if (item.textContent.toLowerCase().includes('punjab') && item.offsetHeight > 0) {
+                                    item.scrollIntoView({block: 'center'});
+                                    item.click();
+                                    return true;
+                                }
+                            }
+                        }
+                        
+                        // 2. Broad search for any visible element containing 'punjab'
+                        var all = document.querySelectorAll('*');
+                        for (var el of all) {
+                            if (el.textContent.trim().toLowerCase().includes('punjab') && 
+                                el.offsetHeight > 0 && 
+                                el.tagName !== 'INPUT' && el.tagName !== 'SCRIPT' && el.tagName !== 'STYLE') {
+                                
+                                // Avoid clicking the "Search results:" header or the search box itself
+                                if (el.textContent.trim().toLowerCase() === 'search results:') continue;
+                                if (el.closest('.lego-select__fShXQQ')) continue;
+
+                                el.scrollIntoView({block: 'center'});
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    """)
+
+                    if clicked:
+                        log_success("[LOCATION] Added 'Punjab' successfully!")
+                        location_added = True
+                        time.sleep(2)
+                        break
+                    
+                    log_info(f"[LOCATION] Dropdown item not found (attempt {_la+1}), retrying search...")
+                    time.sleep(2)
+                except Exception as la_err:
+                    log_error(f"[LOCATION] Error on attempt {_la+1}: {la_err}")
+                    time.sleep(1)
+
+            if not location_added:
+                log_warning("[LOCATION] Failed to add 'Punjab' automatically.")
+
 
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
         log_info("[PIXEL] Checking if Pixel setup is complete...")
