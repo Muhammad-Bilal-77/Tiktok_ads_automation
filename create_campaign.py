@@ -2615,6 +2615,67 @@ def main():
                                         time.sleep(0.5)
 
 
+                        # ── Set Destination URL from landingurl.txt ───────────
+                        try:
+                            landing_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "landingurl.txt")
+                            if os.path.exists(landing_file):
+                                with open(landing_file, "r", encoding="utf-8") as f:
+                                    landing_url = f.read().strip()
+                                
+                                if landing_url:
+                                    log_info(f"[DESTINATION] Setting URL: {landing_url}")
+                                    # Scroll to the Destination section (usually at the bottom of the ad page)
+                                    driver.execute_script("window.scrollBy(0, 500);") 
+                                    time.sleep(1.5)
+                                    
+                                    url_set = driver.execute_script("""
+                                        var textarea = document.querySelector('textarea[placeholder*="http:// or https://"]') ||
+                                                       document.querySelector('.vi-textarea__inner') ||
+                                                       document.querySelector('.revamp_externalUrl__Sqcq textarea') ||
+                                                       document.querySelector('.external-url textarea');
+                                        if (textarea) {
+                                            textarea.scrollIntoView({block: 'center'});
+                                            textarea.focus();
+                                            textarea.value = arguments[0];
+                                            // Trigger input and change events for reactivity
+                                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                                            return true;
+                                        }
+                                        return false;
+                                    """, landing_url)
+                                    
+                                    if url_set:
+                                        log_success("[DESTINATION] Destination URL set successfully.")
+                                    else:
+                                        # Fallback: try finding by text label and moving to next textarea
+                                        url_set_fallback = driver.execute_script("""
+                                            var labels = Array.from(document.querySelectorAll('span, div')).filter(el => el.textContent.includes('Destination URL'));
+                                            for (var lbl of labels) {
+                                                var container = lbl.closest('.external-url') || lbl.closest('.index_container_QoP6Z');
+                                                if (container) {
+                                                    var txt = container.querySelector('textarea');
+                                                    if (txt) {
+                                                        txt.value = arguments[0];
+                                                        txt.dispatchEvent(new Event('input', { bubbles: true }));
+                                                        return true;
+                                                    }
+                                                }
+                                            }
+                                            return false;
+                                        """, landing_url)
+                                        if url_set_fallback:
+                                            log_success("[DESTINATION] Destination URL set via fallback.")
+                                        else:
+                                            log_warning("[DESTINATION] Could not find Destination URL textarea.")
+                                else:
+                                    log_warning("[DESTINATION] landingurl.txt is empty.")
+                            else:
+                                log_warning("[DESTINATION] landingurl.txt not found.")
+                        except Exception as dest_err:
+                            log_error(f"[DESTINATION] Error setting URL: {dest_err}")
+                        time.sleep(1)
+
                         # ── Click 'Publish all' button (Shadow DOM: ks-button-91g) ──────
                         log_info('[PUBLISH] Clicking Publish all button...')
                         time.sleep(1.5)
