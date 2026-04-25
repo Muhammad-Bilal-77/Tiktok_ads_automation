@@ -1682,6 +1682,83 @@ def main():
         if not demographics_expanded:
             log_warning("[DEMOGRAPHICS] Could not expand Demographics section automatically.")
 
+        # ── Remove 'United States' from Location ──────────────────────────────
+        if demographics_expanded:
+            log_info("[LOCATION] Removing 'United States' from targeting...")
+            location_removed = False
+            for _lr in range(6):
+                try:
+                    # Find the 'United States' tag and click its close icon
+                    # The image shows: <div class="tag__close-icon" data-testid="ks-tag-index-4ruw4p">
+                    # and <span class="tag_text">United States</span>
+                    removed = driver.execute_script("""
+                        function findUSTagCloseIcon() {
+                            // Strategy 1: Find by data-testid specifically for tags
+                            var tags = document.querySelectorAll('[data-testid="lego-tag-list-tag"]');
+                            
+                            for (var i = 0; i < tags.length; i++) {
+                                var tag = tags[i];
+                                if (tag.textContent.trim().includes('United States')) {
+                                    // Pierce Shadow DOM of the ks-tag component
+                                    var root = tag.shadowRoot;
+                                    if (root) {
+                                        var closeIcon = root.querySelector('.tag__close-icon') || 
+                                                        root.querySelector('ks-icon-close-small') ||
+                                                        root.querySelector('[part="close-icon"]') ||
+                                                        root.querySelector('svg');
+                                        if (closeIcon) return closeIcon;
+                                    }
+                                    
+                                    // Fallback: search children in light DOM (just in case)
+                                    var lightIcon = tag.querySelector('.tag__close-icon') || 
+                                                    tag.querySelector('ks-icon-close-small') ||
+                                                    tag.querySelector('[part="close-icon"]');
+                                    if (lightIcon) return lightIcon;
+                                }
+                            }
+
+                            // Strategy 2: Broader search if Strategy 1 fails
+                            var allElements = document.querySelectorAll('*');
+                            for (var j = 0; j < allElements.length; j++) {
+                                var el = allElements[j];
+                                if (el.shadowRoot && el.textContent.trim().includes('United States')) {
+                                    var sr = el.shadowRoot;
+                                    var icon = sr.querySelector('.tag__close-icon') || 
+                                               sr.querySelector('ks-icon-close-small') ||
+                                               sr.querySelector('svg');
+                                    if (icon) return icon;
+                                }
+                            }
+                            return null;
+                        }
+                        
+                        var icon = findUSTagCloseIcon();
+                        if (icon) {
+                            icon.scrollIntoView({block: 'center'});
+                            // Try both regular click and dispatching events for Shadow DOM elements
+                            icon.click();
+                            ['mousedown', 'mouseup', 'click'].forEach(type => {
+                                icon.dispatchEvent(new MouseEvent(type, { bubbles: true, composed: true, view: window }));
+                            });
+                            return true;
+                        }
+                        return false;
+                    """)
+                    if removed:
+                        log_success("[LOCATION] Removed 'United States' tag!")
+                        location_removed = True
+                        time.sleep(1.2)
+                        break
+                    else:
+                        log_info(f"[LOCATION] 'United States' tag not found on attempt {_lr+1}, waiting...")
+                        time.sleep(1.5)
+                except Exception as lr_err:
+                    log_error(f"[LOCATION] Error on attempt {_lr+1}: {lr_err}")
+                    time.sleep(1)
+            
+            if not location_removed:
+                log_warning("[LOCATION] Could not remove 'United States' tag automatically.")
+
 
         # ── Wait for user to confirm Pixel setup, then click Continue ─────────
         log_info("[PIXEL] Checking if Pixel setup is complete...")
