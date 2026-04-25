@@ -2026,9 +2026,8 @@ def main():
         # ── Load video codes from CSV ─────────────────────────────────────────
         import csv, os
         default_csv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "video_codes.csv")
-        print(f"\n[VIDEO CODES] Default CSV path: {default_csv}")
-        csv_path_input = input(">>> CSV file path (press Enter to use default): ").strip()
-        csv_path = csv_path_input if csv_path_input else default_csv
+        csv_path = default_csv
+        log_info(f"[VIDEO CODES] Using default CSV: {csv_path}")
 
         post_id_input = input(">>> Enter the Post ID whose video codes you want to use: ").strip()
 
