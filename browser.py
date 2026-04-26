@@ -158,6 +158,9 @@ def create_browser():
     # Hide automation
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
+    
+    # Keep browser open after script exits
+    chrome_options.add_experimental_option("detach", True)
 
     log_step(3, "Launching Chrome...")
     driver_path = _get_local_driver_path()
